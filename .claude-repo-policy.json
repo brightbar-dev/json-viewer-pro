@@ -1,0 +1,5 @@
+{
+  "git_commit": "allow",
+  "git_push": "ask",
+  "description": "Product repo — autonomous commits during development, push requires approval"
+}
