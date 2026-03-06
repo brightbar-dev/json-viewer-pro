@@ -19,6 +19,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
+      - run: npx wxt prepare
       - run: npm test
       - name: Build Chrome
         run: npx wxt build
