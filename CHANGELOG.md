@@ -2,6 +2,15 @@
 
 All notable changes to JSON Viewer Pro will be documented in this file.
 
+## [0.4.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.3.0...json-viewer-pro-v0.4.0) (2026-04-01)
+
+
+### Features
+
+* add cross-promotion links to popup ([727b1fb](https://github.com/brightbar-dev/json-viewer-pro/commit/727b1fbb066fbabc0e2c6cbde0731b2d8717d89a))
+* add store/cws.json for CWS submission metadata ([75a8ca8](https://github.com/brightbar-dev/json-viewer-pro/commit/75a8ca8d735d71756431c7d64d44052e95dee70c))
+* redesign icon — JSON tree structure with { brace ([30b838b](https://github.com/brightbar-dev/json-viewer-pro/commit/30b838bd9cacf78796df09e02ebff266e085d525))
+
 ## [0.3.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.2.0...json-viewer-pro-v0.3.0) (2026-04-01)
 
 
