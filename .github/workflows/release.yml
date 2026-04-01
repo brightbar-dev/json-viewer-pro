@@ -45,3 +45,51 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ needs.release-please.outputs.tag_name }} .output/*.zip
+
+      - name: Publish to Chrome Web Store
+        run: |
+          # Get access token from refresh token
+          TOKEN_RESPONSE=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
+            -d "client_id=${{ secrets.CWS_CLIENT_ID }}" \
+            -d "client_secret=${{ secrets.CWS_CLIENT_SECRET }}" \
+            -d "refresh_token=${{ secrets.CWS_REFRESH_TOKEN }}" \
+            -d "grant_type=refresh_token")
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "Failed to get access token"
+            echo "$TOKEN_RESPONSE" | jq .
+            exit 1
+          fi
+
+          # Find the Chrome ZIP
+          CHROME_ZIP=$(ls .output/*-chrome.zip 2>/dev/null | head -1)
+          if [ -z "$CHROME_ZIP" ]; then
+            echo "No Chrome ZIP found"
+            exit 1
+          fi
+
+          # Upload to CWS (updates existing item)
+          UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X PUT "https://www.googleapis.com/upload/chromewebstore/v1.1/items/iodhhjpjemdfmmfffmejfnbbjbfafoac" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -T "$CHROME_ZIP")
+          HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
+          BODY=$(echo "$UPLOAD_RESPONSE" | sed '$d')
+          echo "Upload response ($HTTP_CODE): $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Upload failed"
+            exit 1
+          fi
+
+          # Submit for review
+          PUBLISH_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "https://www.googleapis.com/chromewebstore/v1.1/items/iodhhjpjemdfmmfffmejfnbbjbfafoac/publish" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0")
+          HTTP_CODE=$(echo "$PUBLISH_RESPONSE" | tail -1)
+          BODY=$(echo "$PUBLISH_RESPONSE" | sed '$d')
+          echo "Publish response ($HTTP_CODE): $BODY"
