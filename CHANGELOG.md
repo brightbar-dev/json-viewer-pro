@@ -2,6 +2,13 @@
 
 All notable changes to JSON Viewer Pro will be documented in this file.
 
+## [0.5.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.4.0...json-viewer-pro-v0.5.0) (2026-04-02)
+
+
+### Features
+
+* add large and marquee promo tiles, update small tile with new icon ([a0c83cc](https://github.com/brightbar-dev/json-viewer-pro/commit/a0c83cc9e51111093367e706ea44036ec6d8dbae))
+
 ## [0.4.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.3.0...json-viewer-pro-v0.4.0) (2026-04-01)
 
 
