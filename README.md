@@ -34,11 +34,10 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 ## Testing
 
 ```bash
-node tests/test-core.mjs
+npm test
 ```
 
-Open `tests/test-json-detection.html` in a browser for in-browser tests.
-Use `tests/sample.json` as a local test file (serve with a local HTTP server).
+Unit tests run via Vitest + the WXT testing plugin (see `tests/core.test.ts`).
 
 ## Privacy
 
