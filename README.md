@@ -6,12 +6,26 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 
 - Auto-detect JSON pages in Chrome
 - Collapsible tree view with syntax highlighting
-- Search across keys and values
+- Search across keys and values, with a live match count
+- Filter mode — hide every row that does not match the search
+- Keyboard shortcuts — `/` or `Ctrl/Cmd+F` to search, `Esc` to clear, `e`/`c` to expand/collapse all
 - Copy individual values or JSONPath-style paths
-- Toggle between formatted tree view and raw JSON
+- Toggle between formatted tree view and the raw response body
 - Light, dark, and auto (system) themes
 - URL detection — clickable links in string values
 - File size display
+
+### Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| `/` or `Ctrl/Cmd+F` | Focus the search box |
+| `Esc` | Clear the search and unfocus |
+| `e` | Expand all nodes |
+| `c` | Collapse all nodes |
+
+`Ctrl/Cmd+F` is handled by the viewer on purpose: the browser's own find cannot
+reach text inside collapsed nodes, and the built-in search expands matches.
 
 ## Installation
 
@@ -34,11 +48,13 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 ## Testing
 
 ```bash
-node tests/test-core.mjs
+npm test          # Vitest, 77 unit tests
+npm run test:watch
 ```
 
-Open `tests/test-json-detection.html` in a browser for in-browser tests.
-Use `tests/sample.json` as a local test file (serve with a local HTTP server).
+Tests live in `tests/core.test.ts` and cover the exported pure helpers: JSON
+parsing, URL detection, path generation, size formatting, search matching,
+filter visibility, and keyboard-shortcut resolution.
 
 ## Privacy
 
@@ -51,20 +67,26 @@ This extension:
 
 ## Store Listing Copy
 
+> Title and Short Description below mirror `public/_locales/en/messages.json`
+> (`appName` / `appDescription`) — that file is what the store actually renders,
+> so change it there first and copy the result here.
+
 ### Title
-JSON Viewer Pro
+JSON Viewer Pro - Formatter, Beautifier & API Response Viewer
 
 ### Short Description
-Clean, fast JSON viewer with tree view, search, and syntax highlighting. No ads, no tracking, no popups.
+Fast, private JSON viewer with tree view, search, and syntax highlighting. No tracking, no ads, no popups. Open source.
 
 ### Detailed Description
 JSON Viewer Pro automatically detects and formats JSON responses in your browser.
 
 Features:
 - Collapsible tree view with syntax highlighting
-- Search across keys and values with highlighting
+- Search across keys and values with highlighting and a live match count
+- Filter mode — show only the rows that match your search
+- Keyboard shortcuts for search, expand all, and collapse all
 - Copy individual values or full JSON paths
-- Toggle between formatted and raw JSON
+- Toggle between formatted tree view and the raw response
 - Light, dark, and auto themes (follows your system preference)
 - URL detection — clickable links in string values
 - File size display in the toolbar
