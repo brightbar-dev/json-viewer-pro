@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { formatSize, generatePath, isUrl } from '../entrypoints/content';
+import {
+  formatSize,
+  generatePath,
+  isUrl,
+  matchesQuery,
+  formatMatchCount,
+  computeVisibleNodes,
+  resolveShortcut,
+} from '../entrypoints/content';
 
 // ========== JSON Detection ==========
 describe('JSON parsing', () => {
@@ -65,4 +73,108 @@ describe('size formatting', () => {
   it('formats 0 bytes', () => expect(formatSize(0)).toBe('0 B'));
   it('formats 1024 bytes', () => expect(formatSize(1024)).toBe('1024 B'));
   it('formats 1025 bytes', () => expect(formatSize(1025)).toBe('1.0 KB'));
+});
+
+// ========== Search matching ==========
+describe('search matching', () => {
+  it('matches a substring', () => expect(matchesQuery('"userName"', 'user')).toBe(true));
+  it('is case-insensitive on the haystack', () => expect(matchesQuery('"UserName"', 'user')).toBe(true));
+  it('rejects a non-match', () => expect(matchesQuery('"userName"', 'zzz')).toBe(false));
+  it('empty query never matches', () => expect(matchesQuery('anything', '')).toBe(false));
+  it('null haystack never matches', () => expect(matchesQuery(null, 'a')).toBe(false));
+  it('undefined haystack never matches', () => expect(matchesQuery(undefined, 'a')).toBe(false));
+  it('matches inside a value', () => expect(matchesQuery('"https://example.com"', 'example')).toBe(true));
+  it('matches a number rendered as text', () => expect(matchesQuery('42', '4')).toBe(true));
+});
+
+describe('match count formatting', () => {
+  it('zero', () => expect(formatMatchCount(0)).toBe('No matches'));
+  it('one is singular', () => expect(formatMatchCount(1)).toBe('1 match'));
+  it('two is plural', () => expect(formatMatchCount(2)).toBe('2 matches'));
+  it('many', () => expect(formatMatchCount(137)).toBe('137 matches'));
+});
+
+// ========== Filter visibility ==========
+describe('filter visibility', () => {
+  // Tree: 0 root -> 1 "user" -> 2 "name", 3 "id"; 0 -> 4 "meta"
+  const parents = [null, 0, 1, 1, 0];
+
+  it('no matches means nothing visible', () => {
+    const v = computeVisibleNodes(parents, [false, false, false, false, false]);
+    expect(v.size).toBe(0);
+  });
+
+  it('keeps a match and its ancestors', () => {
+    const v = computeVisibleNodes(parents, [false, false, true, false, false]);
+    expect([...v].sort()).toEqual([0, 1, 2]);
+  });
+
+  it('keeps descendants of a matching node', () => {
+    const v = computeVisibleNodes(parents, [false, true, false, false, false]);
+    expect([...v].sort()).toEqual([0, 1, 2, 3]);
+  });
+
+  it('hides unrelated siblings', () => {
+    const v = computeVisibleNodes(parents, [false, false, true, false, false]);
+    expect(v.has(4)).toBe(false);
+    expect(v.has(3)).toBe(false);
+  });
+
+  it('a root match keeps the whole tree', () => {
+    const v = computeVisibleNodes(parents, [true, false, false, false, false]);
+    expect(v.size).toBe(5);
+  });
+
+  it('handles multiple matches in different branches', () => {
+    const v = computeVisibleNodes(parents, [false, false, true, false, true]);
+    expect([...v].sort()).toEqual([0, 1, 2, 4]);
+  });
+
+  it('handles a flat list of roots', () => {
+    const v = computeVisibleNodes([null, null, null], [false, true, false]);
+    expect([...v]).toEqual([1]);
+  });
+
+  it('handles an empty tree', () => {
+    expect(computeVisibleNodes([], []).size).toBe(0);
+  });
+});
+
+// ========== Keyboard shortcuts ==========
+describe('keyboard shortcuts', () => {
+  const key = (k: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean }> = {}) =>
+    ({ key: k, ctrlKey: false, metaKey: false, ...mods });
+
+  it('Cmd+F focuses search', () =>
+    expect(resolveShortcut(key('f', { metaKey: true }), false)).toBe('focus-search'));
+  it('Ctrl+F focuses search', () =>
+    expect(resolveShortcut(key('f', { ctrlKey: true }), false)).toBe('focus-search'));
+  it('Cmd+F works even while typing', () =>
+    expect(resolveShortcut(key('f', { metaKey: true }), true)).toBe('focus-search'));
+  it('slash focuses search', () =>
+    expect(resolveShortcut(key('/'), false)).toBe('focus-search'));
+  it('slash is ignored while typing', () =>
+    expect(resolveShortcut(key('/'), true)).toBeNull());
+  it('Escape clears search', () =>
+    expect(resolveShortcut(key('Escape'), true)).toBe('clear-search'));
+  it('Escape works outside the input too', () =>
+    expect(resolveShortcut(key('Escape'), false)).toBe('clear-search'));
+  it('e expands all', () => expect(resolveShortcut(key('e'), false)).toBe('expand-all'));
+  it('c collapses all', () => expect(resolveShortcut(key('c'), false)).toBe('collapse-all'));
+  it('does not hijack Cmd+C', () =>
+    expect(resolveShortcut(key('c', { metaKey: true }), false)).toBeNull());
+  it('does not hijack Ctrl+C', () =>
+    expect(resolveShortcut(key('c', { ctrlKey: true }), false)).toBeNull());
+  it('does not fire e while typing', () =>
+    expect(resolveShortcut(key('e'), true)).toBeNull());
+  it('does not fire c while typing', () =>
+    expect(resolveShortcut(key('c'), true)).toBeNull());
+  it('ignores Alt+F', () =>
+    expect(resolveShortcut(key('f', { altKey: true }), false)).toBeNull());
+  it('ignores unrelated keys', () =>
+    expect(resolveShortcut(key('q'), false)).toBeNull());
+  it('handles uppercase E', () => expect(resolveShortcut(key('E'), false)).toBe('expand-all'));
+  it('handles uppercase C', () => expect(resolveShortcut(key('C'), false)).toBe('collapse-all'));
+  it('handles uppercase F with meta', () =>
+    expect(resolveShortcut(key('F', { metaKey: true }), false)).toBe('focus-search'));
 });
