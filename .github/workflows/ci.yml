@@ -21,6 +21,11 @@ jobs:
       - run: npm ci
       - run: npx wxt prepare
       - run: npm test
+      # Typecheck. Added 2026-08-26: `wxt build` bundles with esbuild, which
+      # STRIPS types without checking them, so a type error has never been able
+      # to fail this workflow. Two real ones (TS2322 on entrypoints/content.ts)
+      # had been sitting on main undetected until a merge review ran tsc by hand.
+      - run: npx tsc --noEmit
       - name: Build Chrome
         run: npx wxt build
       - name: Build Firefox

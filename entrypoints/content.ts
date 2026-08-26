@@ -91,7 +91,10 @@ function renderCollapsible(
 ): HTMLElement {
   const isArray = type === 'array';
   const count = isArray ? (obj as unknown[]).length : Object.keys(obj).length;
-  const bracket = isArray ? ['[', ']'] : ['{', '}'];
+  // Tuple, not string[] — with noUncheckedIndexedAccess an array index is
+  // `string | undefined`, which is what made both `bracket[i]` assignments
+  // below type-errors. As a 2-tuple the indices are known-present.
+  const bracket: readonly [string, string] = isArray ? ['[', ']'] : ['{', '}'];
 
   const container = el('div', 'jvp-node jvp-collapsible');
   container.dataset.path = path;
