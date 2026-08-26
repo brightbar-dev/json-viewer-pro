@@ -108,6 +108,20 @@ body.jvp-light, body.jvp-dark {
   background: var(--jvp-hover);
 }
 
+.jvp-btn[aria-pressed='true'],
+.jvp-btn-active {
+  background: var(--jvp-link);
+  border-color: var(--jvp-link);
+  color: #ffffff;
+}
+
+.jvp-match-count {
+  color: var(--jvp-count);
+  font-size: 12px;
+  white-space: nowrap;
+  min-width: 72px;
+}
+
 .jvp-info {
   margin-left: auto;
   color: var(--jvp-count);
@@ -268,6 +282,10 @@ body.jvp-light, body.jvp-dark {
 }
 
 /* Search highlighting */
+.jvp-search-hidden {
+  display: none;
+}
+
 .jvp-search-match {
   background: var(--jvp-search-match);
   border: 1px solid var(--jvp-search-match-border);

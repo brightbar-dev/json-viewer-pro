@@ -235,12 +235,38 @@ function createToolbar(data: unknown, rawText: string): HTMLElement {
   // Search
   const searchBox = document.createElement('input');
   searchBox.className = 'jvp-search';
+  searchBox.id = 'jvp-search';
   searchBox.type = 'text';
-  searchBox.placeholder = 'Search keys and values\u2026';
-  searchBox.addEventListener('input', () => {
-    highlightSearch(searchBox.value.toLowerCase().trim());
-  });
+  searchBox.placeholder = 'Search keys and values\u2026 (/)';
   toolbar.appendChild(searchBox);
+
+  // Live match count
+  const matchCount = el('span', 'jvp-match-count');
+  matchCount.setAttribute('role', 'status');
+  matchCount.setAttribute('aria-live', 'polite');
+  toolbar.appendChild(matchCount);
+
+  // Filter toggle — hide non-matching rows instead of only highlighting them
+  let filterMode = false;
+  const filterBtn = el('button', 'jvp-btn');
+  filterBtn.textContent = 'Filter';
+  filterBtn.setAttribute('aria-pressed', 'false');
+  (filterBtn as HTMLButtonElement).title = 'Hide rows that do not match the search';
+
+  const rerunSearch = () => {
+    const query = searchBox.value.toLowerCase().trim();
+    const count = runSearch(query, filterMode);
+    matchCount.textContent = query ? formatMatchCount(count) : '';
+  };
+
+  searchBox.addEventListener('input', rerunSearch);
+  filterBtn.addEventListener('click', () => {
+    filterMode = !filterMode;
+    filterBtn.setAttribute('aria-pressed', String(filterMode));
+    filterBtn.classList.toggle('jvp-btn-active', filterMode);
+    rerunSearch();
+  });
+  toolbar.appendChild(filterBtn);
 
   // Toggle: Tree / Raw
   const toggleRaw = el('button', 'jvp-btn');
@@ -256,39 +282,31 @@ function createToolbar(data: unknown, rawText: string): HTMLElement {
   });
   toolbar.appendChild(toggleRaw);
 
-  // Copy all
+  // Copy all — copies whichever view is on screen
   const copyAll = el('button', 'jvp-btn');
   copyAll.textContent = 'Copy';
   copyAll.addEventListener('click', () => {
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    const raw = document.getElementById('jvp-raw');
+    const showingRaw = !!raw && !raw.classList.contains('jvp-hidden');
+    navigator.clipboard.writeText(showingRaw ? rawText : JSON.stringify(data, null, 2));
     copyAll.textContent = 'Copied!';
     setTimeout(() => (copyAll.textContent = 'Copy'), 1200);
   });
   toolbar.appendChild(copyAll);
 
   // Expand all
-  const expandAll = el('button', 'jvp-btn');
-  expandAll.textContent = 'Expand All';
-  expandAll.addEventListener('click', () => {
-    document.querySelectorAll('.jvp-collapsed').forEach((node) => {
-      node.classList.remove('jvp-collapsed');
-      const t = node.querySelector('.jvp-toggle');
-      if (t) t.textContent = '\u25BC';
-    });
-  });
-  toolbar.appendChild(expandAll);
+  const expandAllBtn = el('button', 'jvp-btn');
+  expandAllBtn.textContent = 'Expand All';
+  (expandAllBtn as HTMLButtonElement).title = 'Expand every node (e)';
+  expandAllBtn.addEventListener('click', expandAll);
+  toolbar.appendChild(expandAllBtn);
 
   // Collapse all
-  const collapseAll = el('button', 'jvp-btn');
-  collapseAll.textContent = 'Collapse All';
-  collapseAll.addEventListener('click', () => {
-    document.querySelectorAll('.jvp-collapsible').forEach((node) => {
-      node.classList.add('jvp-collapsed');
-      const t = node.querySelector('.jvp-toggle');
-      if (t) t.textContent = '\u25B6';
-    });
-  });
-  toolbar.appendChild(collapseAll);
+  const collapseAllBtn = el('button', 'jvp-btn');
+  collapseAllBtn.textContent = 'Collapse All';
+  (collapseAllBtn as HTMLButtonElement).title = 'Collapse every node (c)';
+  collapseAllBtn.addEventListener('click', collapseAll);
+  toolbar.appendChild(collapseAllBtn);
 
   // Info
   const info = el('span', 'jvp-info');
@@ -315,47 +333,194 @@ export function isUrl(str: string): boolean {
   return /^https?:\/\//.test(str);
 }
 
-function highlightSearch(query: string): void {
-  document.querySelectorAll('.jvp-search-match').forEach((el) => {
-    el.classList.remove('jvp-search-match');
-  });
-  document.querySelectorAll('.jvp-search-hidden').forEach((el) => {
-    el.classList.remove('jvp-search-hidden');
+// ---------- Search ----------
+
+/** True when `haystack` contains the already-lowercased `query`. */
+export function matchesQuery(haystack: string | null | undefined, query: string): boolean {
+  if (!query) return false;
+  return (haystack ?? '').toLowerCase().includes(query);
+}
+
+/** Human-readable match count for the toolbar. */
+export function formatMatchCount(count: number): string {
+  if (count === 0) return 'No matches';
+  return `${count} match${count === 1 ? '' : 'es'}`;
+}
+
+/**
+ * Given each node's parent index (null for a root) and which nodes matched the
+ * search, return the indices that stay visible in filter mode: the matches,
+ * their ancestors (so a hit is never orphaned) and their descendants (so an
+ * object that matched does not render as empty).
+ */
+export function computeVisibleNodes(
+  parents: (number | null)[],
+  matched: boolean[],
+): Set<number> {
+  const visible = new Set<number>();
+
+  // Matches and everything above them.
+  for (let i = 0; i < matched.length; i++) {
+    if (!matched[i]) continue;
+    let cur: number | null = i;
+    while (cur !== null && cur >= 0) {
+      visible.add(cur);
+      cur = parents[cur] ?? null;
+    }
+  }
+
+  // Matches and everything below them.
+  const children: number[][] = parents.map(() => []);
+  parents.forEach((parent, i) => {
+    if (parent !== null && parent >= 0 && children[parent]) children[parent].push(i);
   });
 
-  if (!query) return;
+  const seen = new Set<number>();
+  const stack: number[] = [];
+  matched.forEach((m, i) => {
+    if (m) {
+      stack.push(i);
+      seen.add(i);
+    }
+  });
 
-  document.querySelectorAll('.jvp-node').forEach((node) => {
+  while (stack.length) {
+    const n = stack.pop()!;
+    visible.add(n);
+    for (const c of children[n] ?? []) {
+      if (!seen.has(c)) {
+        seen.add(c);
+        stack.push(c);
+      }
+    }
+  }
+
+  return visible;
+}
+
+/**
+ * Highlight every node matching `query`, expanding collapsed ancestors so the
+ * hits are visible. When `filterMode` is on, non-matching rows are hidden
+ * outright (see `computeVisibleNodes`). Returns the number of matching nodes.
+ */
+function runSearch(query: string, filterMode: boolean): number {
+  document.querySelectorAll('.jvp-search-match').forEach((e) => {
+    e.classList.remove('jvp-search-match');
+  });
+  document.querySelectorAll('.jvp-search-hidden').forEach((e) => {
+    e.classList.remove('jvp-search-hidden');
+  });
+
+  if (!query) return 0;
+
+  const nodes = Array.from(document.querySelectorAll('.jvp-node'));
+  const index = new Map<Element, number>();
+  nodes.forEach((node, i) => index.set(node, i));
+
+  const parents: (number | null)[] = [];
+  const matched: boolean[] = [];
+
+  nodes.forEach((node, i) => {
+    const parentNode = node.parentElement?.closest('.jvp-node') ?? null;
+    parents[i] = parentNode ? index.get(parentNode) ?? null : null;
+
     const keys = node.querySelectorAll(':scope > .jvp-key, :scope > .jvp-header > .jvp-key');
     const values = node.querySelectorAll(':scope > .jvp-value');
-    let matches = false;
+    let isMatch = false;
 
     keys.forEach((k) => {
-      if (k.textContent?.toLowerCase().includes(query)) {
-        matches = true;
+      if (matchesQuery(k.textContent, query)) {
+        isMatch = true;
         k.classList.add('jvp-search-match');
       }
     });
 
     values.forEach((v) => {
-      if (v.textContent?.toLowerCase().includes(query)) {
-        matches = true;
+      if (matchesQuery(v.textContent, query)) {
+        isMatch = true;
         v.classList.add('jvp-search-match');
       }
     });
 
-    if (matches) {
-      let parent = node.parentElement;
-      while (parent) {
-        if (parent.classList.contains('jvp-collapsed')) {
-          parent.classList.remove('jvp-collapsed');
-          const t = parent.querySelector('.jvp-toggle');
-          if (t) t.textContent = '\u25BC';
-        }
-        parent = parent.parentElement;
+    matched[i] = isMatch;
+  });
+
+  // Reveal each hit by expanding the collapsed nodes above it.
+  nodes.forEach((node, i) => {
+    if (!matched[i]) return;
+    let parent = node.parentElement;
+    while (parent) {
+      if (parent.classList.contains('jvp-collapsed')) {
+        parent.classList.remove('jvp-collapsed');
+        const t = parent.querySelector('.jvp-toggle');
+        if (t) t.textContent = '\u25BC';
       }
+      parent = parent.parentElement;
     }
   });
+
+  if (filterMode) {
+    const visible = computeVisibleNodes(parents, matched);
+    nodes.forEach((node, i) => {
+      if (!visible.has(i)) node.classList.add('jvp-search-hidden');
+    });
+  }
+
+  return matched.reduce((n, m) => (m ? n + 1 : n), 0);
+}
+
+// ---------- Expand / collapse ----------
+
+function expandAll(): void {
+  document.querySelectorAll('.jvp-collapsed').forEach((node) => {
+    node.classList.remove('jvp-collapsed');
+    const t = node.querySelector('.jvp-toggle');
+    if (t) t.textContent = '\u25BC';
+  });
+}
+
+function collapseAll(): void {
+  document.querySelectorAll('.jvp-collapsible').forEach((node) => {
+    node.classList.add('jvp-collapsed');
+    const t = node.querySelector('.jvp-toggle');
+    if (t) t.textContent = '\u25B6';
+  });
+}
+
+// ---------- Keyboard shortcuts ----------
+
+export type ShortcutAction =
+  | 'focus-search'
+  | 'clear-search'
+  | 'expand-all'
+  | 'collapse-all'
+  | null;
+
+export interface ShortcutEvent {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey?: boolean;
+}
+
+/**
+ * Map a keydown to a viewer action. Ctrl/Cmd+F is claimed deliberately: the
+ * browser's own find cannot reach text inside collapsed nodes, our search can.
+ * Bare letter keys are ignored while the user is typing in a field.
+ */
+export function resolveShortcut(e: ShortcutEvent, inInput: boolean): ShortcutAction {
+  const mod = e.ctrlKey || e.metaKey;
+
+  if (mod && !e.altKey && (e.key === 'f' || e.key === 'F')) return 'focus-search';
+  if (e.key === 'Escape') return 'clear-search';
+
+  if (inInput || mod || e.altKey) return null;
+
+  if (e.key === '/') return 'focus-search';
+  if (e.key === 'e' || e.key === 'E') return 'expand-all';
+  if (e.key === 'c' || e.key === 'C') return 'collapse-all';
+
+  return null;
 }
 
 function init(): void {
@@ -402,9 +567,39 @@ function init(): void {
 
     const rawContainer = el('pre', 'jvp-raw jvp-hidden');
     rawContainer.id = 'jvp-raw';
-    rawContainer.textContent = JSON.stringify(jsonData, null, 2);
+    // The untouched response body — not a re-serialisation of the parsed value.
+    rawContainer.textContent = rawText;
     root.appendChild(rawContainer);
 
     document.body.appendChild(root);
+
+    // Keyboard shortcuts. These are plain in-page listeners: the `commands`
+    // manifest key (and its permission prompt) is not needed for them.
+    document.addEventListener('keydown', (e) => {
+      const target = e.target as HTMLElement | null;
+      const inInput = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+      const action = resolveShortcut(e, inInput);
+      if (!action) return;
+
+      const search = document.getElementById('jvp-search') as HTMLInputElement | null;
+
+      if (action === 'focus-search') {
+        e.preventDefault();
+        search?.focus();
+        search?.select();
+      } else if (action === 'clear-search') {
+        if (!search || (!search.value && document.activeElement !== search)) return;
+        e.preventDefault();
+        search.value = '';
+        search.dispatchEvent(new Event('input'));
+        search.blur();
+      } else if (action === 'expand-all') {
+        e.preventDefault();
+        expandAll();
+      } else if (action === 'collapse-all') {
+        e.preventDefault();
+        collapseAll();
+      }
+    });
   });
 }

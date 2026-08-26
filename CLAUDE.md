@@ -20,7 +20,10 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - Tree nodes are collapsible. Toggle state uses `jvp-collapsed` class.
 - Search highlights matches with `jvp-search-match` class.
 - Themes stored in `browser.storage.sync`.
-- Utility functions `formatSize`, `generatePath`, `isUrl` are exported for testing.
+- Search highlights matches with `jvp-search-match`; filter mode adds `jvp-search-hidden` to every row that is not a match, an ancestor of one, or a descendant of one
+- Keyboard shortcuts are plain in-page `keydown` listeners — deliberately NOT the `commands` manifest key, which would add a permission
+- The Raw view shows the original response body verbatim, not a re-serialisation of the parsed value; Copy copies whichever view is on screen
+- Utility functions `formatSize`, `generatePath`, `isUrl`, `matchesQuery`, `formatMatchCount`, `computeVisibleNodes`, `resolveShortcut` are exported for testing.
 
 ## Commands
 ```bash
@@ -37,8 +40,9 @@ npm run test:watch   # Watch mode
 ```bash
 npm test
 ```
-- 39 unit tests via Vitest + WXT testing plugin
-- Tests cover: JSON parsing, URL detection, path generation, size formatting
+- 77 unit tests via Vitest + WXT testing plugin
+- Tests cover: JSON parsing, URL detection, path generation, size formatting, search matching, filter visibility, keyboard shortcuts
+- The test environment is Node, with **no DOM** — logic that needs testing must be extracted into a pure exported function (this is why `computeVisibleNodes` takes parent/match arrays rather than elements). Adding jsdom/happy-dom would mean a new devDependency.
 - `fakeBrowser` from `wxt/testing` provides in-memory browser API mocks
 
 ## Conventions
