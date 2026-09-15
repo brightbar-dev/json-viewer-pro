@@ -14,6 +14,7 @@
  * delegated listener per event type serves them all.
  */
 import { formatCount, formatNumber, formatUtc, isHexColor, isImageUrl, isUrl, relativeTime, timestampMillis } from './format';
+import { icon } from './icons';
 import { LosslessNumber } from './lossless';
 import { primitiveText } from './search';
 import { resolveTreeKey } from './shortcuts';
@@ -476,7 +477,7 @@ export class TreeView {
     actions.className = 'jvp-actions-btn';
     actions.dataset.act = 'menu';
     actions.tabIndex = -1;
-    actions.textContent = '⋯';
+    actions.append(icon('more'));
     actions.title = 'Copy value or path…';
     actions.setAttribute('aria-label', 'Actions');
     actions.setAttribute('aria-haspopup', 'menu');

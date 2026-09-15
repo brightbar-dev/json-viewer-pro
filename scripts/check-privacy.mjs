@@ -17,6 +17,22 @@ import { checkManifest, scanText, SCANNED } from './privacy-scan.mjs';
 
 /** @type {import('./privacy-scan.mjs').Allow[]} */
 const ALLOW = [
+  // The SVG namespace string used to create inline icons (document.createElementNS).
+  // It is an identifier; nothing is ever requested from it.
+  {
+    file: /\.js$/,
+    rule: 'remote-url',
+    match: /^http:\/\/www\.w3\.org\/2000\/svg$/,
+    reason: 'SVG namespace identifier for inline icons; never fetched',
+  },
+  // The welcome page links to the project on GitHub, and its sample document
+  // contains the same URL as a value shown in the tree. Both are clickable links only.
+  {
+    file: /^(welcome\.html|chunks\/welcome-[\w-]+\.js)$/,
+    rule: 'remote-url',
+    match: /^https:\/\/github\.com\/brightbar-dev\/json-viewer-pro(#[\w-]+)?$/,
+    reason: 'project link on the welcome page (and in its sample document); never fetched',
+  },
   // The popup's "More from Brightbar" list: plain <a href> links to the Chrome
   // Web Store that open in a new tab when clicked. Nothing is loaded from them.
   {

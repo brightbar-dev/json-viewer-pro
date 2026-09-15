@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to JSON Viewer Pro</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body class="jvp-light">
+  <main class="welcome">
+    <header class="hero">
+      <img src="/icon-128.png" width="56" height="56" alt="">
+      <div>
+        <h1>JSON Viewer Pro is ready</h1>
+        <p>Open any JSON URL and it becomes a fast tree you can search, filter and query. There is nothing to set up, and nothing leaves your computer.</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Try it here</h2>
+      <p class="muted">A sample document, shown exactly as a JSON response would be. Click a row, use the arrow keys, or type <code>$..version</code> in the search box.</p>
+      <div class="demo" id="demo"></div>
+    </section>
+
+    <div class="columns">
+      <section class="card">
+        <h2>Keyboard</h2>
+        <table class="keys">
+          <tbody>
+            <tr><td><kbd>/</kbd> or <kbd>Ctrl/⌘</kbd><kbd>F</kbd></td><td>Search, or a JSONPath starting with <code>$</code></td></tr>
+            <tr><td><kbd>Enter</kbd> / <kbd>Shift</kbd><kbd>Enter</kbd></td><td>Next / previous match</td></tr>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Move through the tree, open and close</td></tr>
+            <tr><td><kbd>*</kbd></td><td>Open everything below the selected row</td></tr>
+            <tr><td><kbd>e</kbd> / <kbd>c</kbd> / <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></td><td>Expand all / collapse all / show 1–3 levels</td></tr>
+            <tr><td><kbd>Ctrl/⌘</kbd><kbd>C</kbd></td><td>Copy the selected value as JSON</td></tr>
+            <tr><td><kbd>Ctrl/⌘</kbd><kbd>Shift</kbd><kbd>C</kbd></td><td>Copy its path</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Local files</h2>
+        <p>Browsers only let an extension read <code>file://</code> pages if you allow it. In Chrome:</p>
+        <ol>
+          <li>Copy this address: <code id="ext-url">chrome://extensions</code> <button type="button" class="jvp-btn jvp-btn-small" id="copy-url">Copy</button></li>
+          <li>Paste it into the address bar and press Enter. Extension pages cannot open that address for you.</li>
+          <li>Turn on <strong>Allow access to file URLs</strong>.</li>
+        </ol>
+        <p class="muted">Or skip that entirely: <a href="viewer.html">open the viewer page</a> and drop the file on it.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Private, and verifiably so</h2>
+      <p>No analytics, no ads, no donation popups, and no network requests of its own. The only permission is <code>storage</code>, for your settings. Every build is checked automatically for any code that could send data anywhere, and fails if it finds some. The check is <a href="https://github.com/brightbar-dev/json-viewer-pro#verified-not-just-promised" target="_blank" rel="noopener">open source on GitHub</a>.</p>
+    </section>
+
+    <footer class="links">
+      <a href="options.html">Settings</a>
+      <a href="viewer.html">Open the viewer</a>
+    </footer>
+  </main>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

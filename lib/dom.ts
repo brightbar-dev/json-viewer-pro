@@ -70,9 +70,11 @@ export async function copyText(text: string): Promise<boolean> {
 
 /** Briefly swap a button's label to confirm (or deny) a copy. */
 export function flashLabel(button: HTMLElement, done: Promise<boolean>, okLabel: string): void {
-  const original = button.textContent;
+  // Only the label changes, so an icon beside it stays put.
+  const target = button.querySelector('.jvp-btn-label') ?? button;
+  const original = target.textContent;
   void done.then((ok) => {
-    button.textContent = ok ? okLabel : 'Copy failed';
-    setTimeout(() => (button.textContent = original), 1200);
+    target.textContent = ok ? okLabel : 'Copy failed';
+    setTimeout(() => (target.textContent = original), 1200);
   });
 }

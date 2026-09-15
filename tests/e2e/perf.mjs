@@ -137,10 +137,10 @@ async function interactionsIn(ctx, page) {
   await step('filter off', () => page.click('text=Filter'));
   await step('search "e" (~370k matches)', () => page.fill('#jvp-search', 'e'), searchDone);
   await step('Escape', () => page.press('#jvp-search', 'Escape'));
-  await step('expand all (~900k nodes)', () => page.click('text=Expand all'));
+  await step('expand all (~900k nodes)', () => page.click('button[title^="Expand every node"]'));
   const heap = await heapMB(ctx, page);
   await step('scroll to the bottom, all expanded', () => page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)));
-  await step('collapse all', () => page.click('text=Collapse all'));
+  await step('collapse all', () => page.click('button[title^="Collapse everything"]'));
   await step('Raw view', () => page.click('text=Raw'));
   await step('back to Tree', () => page.click('text=Tree'));
   return { rows, heap };

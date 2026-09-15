@@ -28,6 +28,10 @@
   --jvp-link: #0969da;
   --jvp-error: #cf222e;
   --jvp-error-bg: #ffebe9;
+  --jvp-hover-strong: #eaeef2;
+  --jvp-accent-soft: #ddf4ff;
+  --jvp-accent-text: #0550ae;
+  --jvp-accent-ring: rgba(9, 105, 218, 0.25);
 }
 
 .jvp-dark {
@@ -53,6 +57,10 @@
   --jvp-link: #58a6ff;
   --jvp-error: #ff7b72;
   --jvp-error-bg: #3c1618;
+  --jvp-hover-strong: #21262d;
+  --jvp-accent-soft: #10233c;
+  --jvp-accent-text: #79c0ff;
+  --jvp-accent-ring: rgba(56, 139, 253, 0.35);
 }
 
 /* Font, size, row height and indent are settings; lib/viewer.ts sets them inline on <body>. */
@@ -62,6 +70,7 @@ body.jvp-dark {
   --jvp-font-size: 13px;
   --jvp-row-h: 20px;
   --jvp-indent: 18px;
+  --jvp-font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   background: var(--jvp-bg);
   color: var(--jvp-text);
@@ -103,8 +112,8 @@ body.jvp-dark {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 7px 12px;
 }
 
 .jvp-search-group {
@@ -114,32 +123,30 @@ body.jvp-dark {
   gap: 4px;
 }
 
+/* A segmented control: one outline around related buttons. */
 .jvp-group {
   display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--jvp-border);
+  border-radius: 8px;
+  background: var(--jvp-bg);
 }
 
 .jvp-group > .jvp-btn {
-  margin-left: -1px;
-  border-radius: 0;
+  height: 26px;
+  border-radius: 6px;
 }
 
-.jvp-group > .jvp-btn:first-child {
-  margin-left: 0;
-  border-radius: 6px 0 0 6px;
-}
-
-.jvp-group > .jvp-btn:last-child {
-  border-radius: 0 6px 6px 0;
-}
-
-.jvp-group > .jvp-btn:focus-visible {
-  position: relative;
-  z-index: 1;
+.jvp-group > .jvp-btn-icon {
+  width: 26px;
 }
 
 .jvp-btn-level {
-  min-width: 28px;
-  padding: 0 8px;
+  min-width: 26px;
+  padding: 0 7px;
+  font-variant-numeric: tabular-nums;
 }
 
 .jvp-btn-small {
@@ -234,42 +241,65 @@ body.jvp-dark {
   display: none;
 }
 
-.jvp-search {
+.jvp-search-wrap {
+  position: relative;
+  display: flex;
   flex: 1 1 240px;
-  min-width: 170px;
+  align-items: center;
+  min-width: 180px;
   max-width: 320px;
-  height: 28px;
+}
+
+.jvp-search-wrap > .jvp-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--jvp-muted);
+  pointer-events: none;
+}
+
+.jvp-search {
+  width: 100%;
+  height: 30px;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 8px 0 31px;
   border: 1px solid var(--jvp-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--jvp-bg);
   color: var(--jvp-text);
-  font-family: inherit;
-  font-size: 13px;
+  font-family: var(--jvp-font);
+  font-size: 12.5px;
+}
+
+.jvp-search::placeholder {
+  color: var(--jvp-muted);
 }
 
 .jvp-search:focus {
-  outline: 2px solid var(--jvp-accent);
-  outline-offset: -1px;
+  border-color: var(--jvp-accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--jvp-accent-ring);
 }
 
+/* Quiet buttons: no outline until hovered; pressed ones take a soft accent. */
 .jvp-btn {
-  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
   margin: 0;
   padding: 0 10px;
-  border: 1px solid var(--jvp-border);
-  border-radius: 6px;
-  background: var(--jvp-bg);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: var(--jvp-text);
-  font-family: inherit;
-  font-size: 12px;
+  font: 500 12.5px/1 var(--jvp-font-ui);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .jvp-btn:hover:not(:disabled) {
-  background: var(--jvp-hover);
+  background: var(--jvp-hover-strong);
 }
 
 .jvp-btn:disabled {
@@ -283,14 +313,59 @@ body.jvp-dark {
 }
 
 .jvp-btn[aria-pressed='true'] {
-  background: var(--jvp-accent);
-  border-color: var(--jvp-accent);
-  color: #ffffff;
+  background: var(--jvp-accent-soft);
+  color: var(--jvp-accent-text);
+}
+
+.jvp-btn .jvp-icon {
+  flex: none;
+  color: var(--jvp-muted);
+}
+
+.jvp-btn:hover:not(:disabled) .jvp-icon,
+.jvp-btn[aria-pressed='true'] .jvp-icon {
+  color: currentColor;
 }
 
 .jvp-btn-icon {
-  width: 28px;
+  width: 30px;
   padding: 0;
+}
+
+.jvp-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.jvp-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--jvp-border);
+}
+
+/* Narrower windows keep the icons and drop the labels (the aria-label stays). */
+@media (max-width: 1100px) {
+  .jvp-btn-label-opt {
+    display: none;
+  }
+
+  .jvp-btn:has(> .jvp-btn-label-opt) {
+    padding: 0 7px;
+  }
+}
+
+@media (max-width: 960px) {
+  .jvp-toolbar .jvp-btn:has(> .jvp-icon) > .jvp-btn-label {
+    display: none;
+  }
+
+  .jvp-toolbar .jvp-btn:has(> .jvp-icon) {
+    padding: 0 7px;
+  }
 }
 
 .jvp-match-count:empty {
@@ -299,8 +374,10 @@ body.jvp-dark {
 
 .jvp-match-count {
   min-width: 64px;
+  margin-left: 2px;
   color: var(--jvp-muted);
-  font-size: 12px;
+  font: 12px var(--jvp-font-ui);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -315,16 +392,16 @@ body.jvp-dark {
   gap: 6px;
   margin-left: auto;
   color: var(--jvp-muted);
-  font-size: 12px;
+  font: 12px var(--jvp-font-ui);
   white-space: nowrap;
 }
 
 .jvp-badge {
-  padding: 0 7px;
-  border: 1px solid var(--jvp-border);
-  border-radius: 10px;
-  font-size: 11px;
-  line-height: 18px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--jvp-hover-strong);
+  color: var(--jvp-muted);
+  font: 500 11px/16px var(--jvp-font-ui);
   cursor: help;
 }
 
@@ -343,6 +420,12 @@ body.jvp-dark {
 
 .jvp-notice-text {
   flex: 1;
+  font: 12.5px/1.4 var(--jvp-font-ui);
+}
+
+.jvp-notice.jvp-notice-info {
+  border-color: var(--jvp-border);
+  background: var(--jvp-accent-soft);
 }
 
 /* ---------- Tree ---------- */
@@ -398,6 +481,7 @@ body.jvp-dark {
 
 .jvp-row.jvp-row-selected {
   background-color: var(--jvp-selected-row);
+  box-shadow: inset 2px 0 0 var(--jvp-accent);
 }
 
 /* Focus ring on the selected row while the tree has keyboard focus. */
@@ -459,9 +543,9 @@ body.jvp-dark {
 }
 
 .jvp-count {
-  padding: 0 4px;
+  padding: 0 5px;
   color: var(--jvp-muted);
-  font-style: italic;
+  font: 12px var(--jvp-font-ui);
 }
 
 .jvp-lossless {
@@ -642,7 +726,7 @@ mark.jvp-search-match {
 
 .jvp-search.jvp-search-jsonpath {
   border-color: var(--jvp-accent);
-  box-shadow: inset 3px 0 0 var(--jvp-accent);
+  background: var(--jvp-accent-soft);
 }
 
 .jvp-match-count.jvp-count-error {

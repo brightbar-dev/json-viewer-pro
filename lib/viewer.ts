@@ -7,6 +7,7 @@
 import css from './viewer.css?inline';
 import { analyze, type EmptyDoc, type ErrorDoc, type JsonDoc, type ViewerDoc } from './document';
 import { addStyleSheet, copyText, el, flashLabel } from './dom';
+import { icon, type IconName } from './icons';
 import { downloadName, formatMatchCount, formatNumber, formatSize, utf8Length } from './format';
 import { compileJsonPath, looksLikeJsonPath } from './jsonpath';
 import { closeMenu, openMenu, type MenuEntry } from './menu';
@@ -57,11 +58,32 @@ interface Context {
   signal: AbortSignal;
 }
 
-function button(label: string, title?: string): HTMLButtonElement {
-  const b = el('button', 'jvp-btn', label);
+/**
+ * A toolbar button: an optional icon, then a label. Labels of icon buttons hide
+ * on narrow windows (`optionalLabel`: on medium ones too); the aria-label keeps
+ * the name either way.
+ */
+function button(label: string, title?: string, iconName?: IconName, optionalLabel = false): HTMLButtonElement {
+  const b = el('button', 'jvp-btn');
   b.type = 'button';
+  setButton(b, label, iconName, optionalLabel);
   if (title) b.title = title;
   return b;
+}
+
+function setButton(b: HTMLButtonElement, label: string, iconName?: IconName, optionalLabel = false): void {
+  b.replaceChildren();
+  if (iconName) {
+    b.append(icon(iconName));
+    if (label) b.setAttribute('aria-label', label);
+  }
+  if (label) b.append(el('span', optionalLabel ? 'jvp-btn-label jvp-btn-label-opt' : 'jvp-btn-label', label));
+}
+
+function separator(extra = ''): HTMLElement {
+  const s = el('span', `jvp-sep ${extra}`.trim());
+  s.setAttribute('aria-hidden', 'true');
+  return s;
 }
 
 function badge(text: string, title: string): HTMLElement {
@@ -182,8 +204,8 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   input.title = 'Plain text searches keys and values. Start with $ for a JSONPath query: $.data[*].email, $..price, $.items[?(@.price < 10)]';
   input.spellcheck = false;
   input.autocomplete = 'off';
-  const prevBtn = button('↑', 'Previous match (Shift+Enter)');
-  const nextBtn = button('↓', 'Next match (Enter)');
+  const prevBtn = button('', 'Previous match (Shift+Enter)', 'up');
+  const nextBtn = button('', 'Next match (Enter)', 'down');
   prevBtn.classList.add('jvp-btn-icon');
   nextBtn.classList.add('jvp-btn-icon');
   prevBtn.setAttribute('aria-label', 'Previous match');
@@ -191,16 +213,18 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   const count = el('span', 'jvp-match-count');
   count.setAttribute('role', 'status');
   count.setAttribute('aria-live', 'polite');
-  searchGroup.append(input, prevBtn, nextBtn, count);
+  const searchWrap = el('label', 'jvp-search-wrap');
+  searchWrap.append(icon('search'), input);
+  searchGroup.append(searchWrap, prevBtn, nextBtn, count);
 
-  const filterBtn = button('Filter', 'Show only the rows that match the search');
+  const filterBtn = button('Filter', 'Show only the rows that match the search', 'filter');
   filterBtn.classList.add('jvp-tree-only');
   filterBtn.setAttribute('aria-pressed', 'false');
-  const rawBtn = button('Raw', 'Switch between the tree and the response exactly as received');
+  const rawBtn = button('Raw', 'Switch between the tree and the response exactly as received', 'code');
 
   const copyGroup = el('div', 'jvp-group');
-  const copyBtn = button('Copy', 'Copy the formatted JSON (in Raw view, the raw body)');
-  const copyMenuBtn = button('▾', 'More copy and download options');
+  const copyBtn = button('Copy', 'Copy the formatted JSON (in Raw view, the raw body)', 'copy');
+  const copyMenuBtn = button('', 'More copy and download options', 'chevron');
   copyMenuBtn.classList.add('jvp-btn-icon');
   copyMenuBtn.setAttribute('aria-label', 'More copy and download options');
   copyMenuBtn.setAttribute('aria-haspopup', 'menu');
@@ -210,20 +234,20 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   const levels = el('div', 'jvp-group jvp-tree-only');
   levels.setAttribute('role', 'group');
   levels.setAttribute('aria-label', 'Expand and collapse');
-  const collapseBtn = button('Collapse all', 'Collapse everything below the top level (c)');
+  const collapseBtn = button('Collapse all', 'Collapse everything below the top level (c)', 'collapse', true);
   const levelBtns = [1, 2, 3].map((n) => {
     const b = button(String(n), `Show ${n} level${n === 1 ? '' : 's'} (${n})`);
     b.setAttribute('aria-label', `Show ${n} level${n === 1 ? '' : 's'}`);
     b.classList.add('jvp-btn-level');
     return b;
   });
-  const expandBtn = button('Expand all', 'Expand every node (e)');
+  const expandBtn = button('Expand all', 'Expand every node (e)', 'expand', true);
   levels.append(collapseBtn, ...levelBtns, expandBtn);
 
-  const sortBtn = button('Sort keys', 'Show object keys in alphabetical order. View only: copies keep the original order.');
+  const sortBtn = button('Sort keys', 'Show object keys in alphabetical order. View only: copies keep the original order.', 'sort', true);
   sortBtn.classList.add('jvp-tree-only');
   sortBtn.setAttribute('aria-pressed', 'false');
-  const tableBtn = button('Table', 'Show the selected array of objects as a table');
+  const tableBtn = button('Table', 'Show the selected array of objects as a table', 'table', true);
   tableBtn.classList.add('jvp-tree-only');
 
   const wrapBtn = button('Wrap', 'Wrap long lines');
@@ -254,15 +278,15 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
     );
   }
   info.append(el('span', 'jvp-size', sizeLabel(doc, opts)));
-  toolbar.append(searchGroup, filterBtn, rawBtn, copyGroup, levels, sortBtn, tableBtn, wrapBtn, linesBtn, info);
+  toolbar.append(searchGroup, filterBtn, separator('jvp-tree-only'), rawBtn, copyGroup, separator('jvp-tree-only'), levels, sortBtn, tableBtn, wrapBtn, linesBtn, info);
 
   // ----- header: path bar -----
   const pathbar = el('div', 'jvp-pathbar jvp-tree-only');
   const crumbs = el('nav', 'jvp-crumbs');
   crumbs.setAttribute('aria-label', 'Path of the selected value');
-  const copyPathBtn = button('Copy path', 'Copy the JSONPath of the selected value (Ctrl/Cmd+Shift+C in the tree)');
+  const copyPathBtn = button('Copy path', 'Copy the JSONPath of the selected value (Ctrl/Cmd+Shift+C in the tree)', 'copy');
   copyPathBtn.classList.add('jvp-btn-small');
-  const pathMenuBtn = button('⋯', 'More ways to copy the selected value');
+  const pathMenuBtn = button('', 'More ways to copy the selected value', 'more');
   pathMenuBtn.classList.add('jvp-btn-small', 'jvp-btn-icon');
   pathMenuBtn.setAttribute('aria-label', 'More ways to copy the selected value');
   pathMenuBtn.setAttribute('aria-haspopup', 'menu');
@@ -279,11 +303,21 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
       hideNotice();
       action();
     });
-    const dismiss = button('×', 'Dismiss');
+    const dismiss = button('', 'Dismiss', 'close');
     dismiss.classList.add('jvp-btn-icon');
     dismiss.setAttribute('aria-label', 'Dismiss');
     dismiss.addEventListener('click', hideNotice);
     notice.replaceChildren(el('span', 'jvp-notice-text', text), go, dismiss);
+    notice.classList.remove('jvp-hidden', 'jvp-notice-info');
+  };
+  /** A notice that only informs. */
+  const showInfo = (text: string) => {
+    const dismiss = button('', 'Dismiss', 'close');
+    dismiss.classList.add('jvp-btn-icon');
+    dismiss.setAttribute('aria-label', 'Dismiss');
+    dismiss.addEventListener('click', hideNotice);
+    notice.replaceChildren(el('span', 'jvp-notice-text', text), dismiss);
+    notice.classList.add('jvp-notice-info');
     notice.classList.remove('jvp-hidden');
   };
   const limitText = `Stopped expanding at ${formatNumber(EXPAND_LIMIT)} nodes to keep the page responsive.`;
@@ -424,6 +458,11 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   updatePath(null);
   updateTableBtn();
   view.refresh();
+  if (doc.raw.length > 5_000_000) {
+    showInfo(
+      `Large document (${sizeLabel(doc, opts)}): rows are drawn as you scroll, and long values are cut to one line. Hover a value to read it, or use its ⋯ menu to copy it.`,
+    );
+  }
   tableBtn.addEventListener('click', () => {
     const t = tableTarget();
     if (t) showTable(t);
@@ -613,7 +652,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
     root.classList.toggle('jvp-mode-tree', !toRaw);
     raw?.el.classList.toggle('jvp-hidden', !toRaw);
     view.el.classList.toggle('jvp-hidden', toRaw);
-    rawBtn.textContent = toRaw ? 'Tree' : 'Raw';
+    setButton(rawBtn, toRaw ? 'Tree' : 'Raw', toRaw ? 'tree' : 'code');
     if (!toRaw) view.refresh();
   });
   wrapBtn.addEventListener('click', () => {
@@ -726,7 +765,7 @@ function stateHeader(title: string, doc: ViewerDoc, opts: MountOptions): HTMLEle
   const toolbar = el('div', 'jvp-toolbar');
   toolbar.append(el('span', 'jvp-title', title));
   if (doc.raw) {
-    const copy = button('Copy raw', 'Copy the response body exactly as received');
+    const copy = button('Copy raw', 'Copy the response body exactly as received', 'copy');
     copy.addEventListener('click', () => flashLabel(copy, copyText(doc.raw), 'Copied!'));
     toolbar.append(copy);
   }
