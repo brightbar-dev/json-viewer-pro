@@ -30,3 +30,7 @@ jobs:
         run: npx wxt build
       - name: Build Firefox
         run: npx wxt build --browser firefox
+      # The privacy promise, enforced: no network APIs, no remote addresses, no
+      # code from strings, and no permission beyond storage, in either build.
+      - name: Privacy check
+        run: node scripts/check-privacy.mjs .output/chrome-mv3 .output/firefox-mv2

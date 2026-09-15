@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON Viewer Pro</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body class="jvp-light">
+  <header class="app-bar" id="app-bar">
+    <strong class="app-title">JSON Viewer Pro</strong>
+    <div class="app-actions" id="editor-actions">
+      <button type="button" class="jvp-btn" id="open">Open file…</button>
+      <input type="file" id="file" accept=".json,.jsonc,.json5,.ndjson,.jsonl,.geojson,.har,.txt,application/json,text/plain" hidden>
+      <button type="button" class="jvp-btn" id="format" title="Pretty-print with two-space indentation">Format</button>
+      <button type="button" class="jvp-btn" id="minify" title="Remove all insignificant whitespace">Minify</button>
+      <button type="button" class="jvp-btn" id="sample" title="Load an example document">Example</button>
+      <button type="button" class="jvp-btn" id="clear">Clear</button>
+      <button type="button" class="jvp-btn jvp-btn-primary" id="view" title="Show it as a tree (Ctrl/Cmd+Enter)">View as tree</button>
+    </div>
+    <div class="app-actions" id="viewer-actions" hidden>
+      <span class="file-name" id="file-name"></span>
+      <button type="button" class="jvp-btn" id="edit">Back to the editor</button>
+    </div>
+  </header>
+
+  <main class="editor-screen" id="editor-screen">
+    <p class="hint">Paste JSON below, open a file, or drop one anywhere on this page. JSON with comments or trailing commas (JSONC) and newline-delimited JSON (NDJSON) work too. Nothing leaves this computer.</p>
+    <div class="editor">
+      <div class="error-line" id="error-line" hidden></div>
+      <pre class="gutter" id="gutter" aria-hidden="true">1</pre>
+      <textarea id="input" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off" aria-label="JSON to view" aria-describedby="status" placeholder='{ "paste": "your JSON here" }'></textarea>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite">
+      <span id="status-text">Paste JSON, open a file, or drop one here.</span>
+      <button type="button" class="jvp-btn jvp-btn-small" id="goto" hidden>Go to the error</button>
+    </div>
+  </main>
+
+  <div class="viewer-host" id="viewer-host" hidden></div>
+  <div class="drop-overlay" id="drop" hidden><span>Drop a file to view it</span></div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

@@ -12,7 +12,8 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip --browser firefox",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:privacy": "node scripts/check-privacy.mjs .output/chrome-mv3 .output/firefox-mv2"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

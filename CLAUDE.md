@@ -9,6 +9,8 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **entrypoints/content.ts** — Content script on all pages at `document_start`. On an ordinary page it exits after one `document.contentType` comparison (no storage read, no DOM access). For JSON-like types it hides the raw body, reads settings, and at DOMContentLoaded hands the body text to `lib/`.
 - **entrypoints/background.ts** — Service worker for extension lifecycle (sets defaults on install).
 - **entrypoints/popup/** — Browser action popup with enable/disable toggle and theme selector (merges into stored settings; never overwrites fields it does not show).
+- **entrypoints/viewer/** — The extension's own viewer page (`viewer.html`, linked from the popup): paste/open/drop JSON, JSONC or NDJSON, live validation with the error line marked, Format/Minify, then `mountViewer(doc, { host, appearance: false })`. Files over 2 MB skip the textarea.
+- **scripts/** — `privacy-scan.mjs` (rules: network APIs, remote addresses, code from strings, manifest over-reach; unit-tested in `tests/privacy.test.ts`) and `check-privacy.mjs` (the CI step over both builds, with its commented `ALLOW` list).
 - **entrypoints/options/** — Options page: theme, font, text size, indentation, initial expansion, image previews. Saves on every change; no Save button.
 - **lib/** — the viewer engine. Pure modules (unit-tested, no DOM):
   - `document.ts` — content-type classification, JSONP / anti-XSSI unwrapping, NDJSON, and `analyze()`, which parses a body exactly once
@@ -43,6 +45,8 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - Image previews load the hovered URL in an `<img referrerpolicy=no-referrer>` (setting `imagePreview`); PRIVACY_POLICY.md says so — keep it true.
 - The Raw view shows the original response body verbatim, not a re-serialisation of the parsed value; Copy copies whichever view is on screen. Raw text is split into `content-visibility: auto` chunks so a 16 MB body is not laid out all at once.
 - **No web-accessible resources**: `viewer.css` is imported as a string (`?inline`) and adopted as a constructable stylesheet — pages cannot probe for the extension, and a response's CSP (`default-src 'none'`, `sandbox`) does not block the styles.
+- **Privacy is a CI gate**: `node scripts/check-privacy.mjs .output/chrome-mv3 .output/firefox-mv2` runs after both builds. Anything it flags either comes out of the code or goes into `ALLOW` with a reason, in review. Vite's module-preload polyfill is switched off in `wxt.config.ts` because it calls `fetch`.
+- **Mounting more than once** (the viewer page): `mountViewer` returns `destroy()`, which aborts an `AbortSignal` passed to every listener added outside the viewer's own elements (document keydown, window scroll/resize, the theme media query), disconnects observers and closes menus. Add new global listeners with `{ signal: ctx.signal }`.
 - Uses `browser.*` API (WXT polyfill) — works in both Chrome and Firefox
 - Themes stored in `browser.storage.sync`.
 
@@ -55,6 +59,7 @@ npm run build:firefox # Production build (Firefox)
 npm run zip          # Build + zip for store submission
 npm run test         # Run Vitest tests
 npm run test:watch   # Watch mode
+npm run check:privacy  # After both builds: fail on network APIs, remote URLs, eval, extra permissions
 node tests/e2e/perf.mjs  # Local perf check in Chrome for Testing (see file header; not in CI)
 ```
 

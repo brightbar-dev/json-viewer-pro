@@ -76,6 +76,7 @@ export class TreeView {
   constructor(
     readonly model: TreeModel,
     private readonly hooks: TreeViewHooks,
+    signal?: AbortSignal,
   ) {
     this.el = document.createElement('div');
     this.el.className = 'jvp-tree';
@@ -99,11 +100,19 @@ export class TreeView {
       const to = (e.relatedTarget as Element | null)?.closest?.('.jvp-img-url');
       if (from && from !== to) this.hidePreview();
     });
-    window.addEventListener('scroll', () => this.schedule(), { passive: true });
-    window.addEventListener('resize', () => {
-      if (!this.virtual) return;
-      this.measure();
-      this.schedule();
+    window.addEventListener('scroll', () => this.schedule(), { passive: true, signal });
+    window.addEventListener(
+      'resize',
+      () => {
+        if (!this.virtual) return;
+        this.measure();
+        this.schedule();
+      },
+      { signal },
+    );
+    signal?.addEventListener('abort', () => {
+      cancelAnimationFrame(this.frame);
+      this.preview?.remove();
     });
   }
 
