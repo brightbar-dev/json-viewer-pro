@@ -161,11 +161,54 @@ export function nodeMatches(node: TNode, re: RegExp): boolean {
  * to a match (so no hit is orphaned), or when it sits inside a matching node
  * (so a matching object does not render as empty).
  */
-export function filterIncludes(result: SearchResult, re: RegExp): (node: TNode) => boolean {
+export function filterIncludes(result: SearchResult, isMatch: (node: TNode) => boolean): (node: TNode) => boolean {
   return (node) => {
-    if (nodeMatches(node, re)) return true;
+    if (isMatch(node)) return true;
     if (isContainerValue(node.value) && result.parents.has(node.value)) return true;
-    for (let p = node.parent; p && p.parent; p = p.parent) if (nodeMatches(p, re)) return true;
+    for (let p = node.parent; p && p.parent; p = p.parent) if (isMatch(p)) return true;
     return false;
   };
+}
+
+/**
+ * A SearchResult built from match paths (a JSONPath query's output), so query
+ * results reuse everything text search has: stepping, revealing, filtering.
+ */
+export function resultFromPaths(root: unknown, paths: readonly (readonly (string | number)[])[]): SearchResult {
+  const result = emptyResult();
+  for (const path of paths) {
+    if (path.length === 0) {
+      result.containers.push(null);
+      result.keys.push(null);
+      result.count++;
+      continue;
+    }
+    let container = root as object;
+    let parent: object | null = null;
+    let parentKey: Key = null;
+    for (let j = 0; ; j++) {
+      if (!result.parents.has(container)) result.parents.set(container, { parent, key: parentKey });
+      if (j === path.length - 1) break;
+      parent = container;
+      parentKey = path[j]!;
+      container = (container as Record<string | number, unknown>)[path[j]!] as object;
+    }
+    result.containers.push(container);
+    result.keys.push(path[path.length - 1]!);
+    result.count++;
+  }
+  result.done = true;
+  return result;
+}
+
+/** Is `node` one of `result`'s matches? Matches are identified by their container and key. */
+export function matchLookup(result: SearchResult): (node: TNode) => boolean {
+  const byContainer = new Map<object | null, Set<Key>>();
+  for (let i = 0; i < result.count; i++) {
+    const c = result.containers[i] ?? null;
+    let keys = byContainer.get(c);
+    if (!keys) byContainer.set(c, (keys = new Set()));
+    keys.add(result.keys[i] ?? null);
+  }
+  return (node) => byContainer.get(node.parent ? (node.parent.value as object) : null)?.has(node.key) ?? false;
 }

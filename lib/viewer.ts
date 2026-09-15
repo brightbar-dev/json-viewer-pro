@@ -8,18 +8,25 @@ import css from './viewer.css?inline';
 import { analyze, type EmptyDoc, type ErrorDoc, type JsonDoc, type ViewerDoc } from './document';
 import { addStyleSheet, copyText, el, flashLabel } from './dom';
 import { downloadName, formatMatchCount, formatNumber, formatSize, utf8Length } from './format';
+import { compileJsonPath, looksLikeJsonPath } from './jsonpath';
 import { openMenu, type MenuEntry } from './menu';
 import { errorExcerpt } from './parser';
 import { RawView } from './rawview';
-import { compileQuery, emptyResult, filterIncludes, pathOfMatch, searchSteps, type SearchResult } from './search';
+import {
+  compileQuery, emptyResult, filterIncludes, matchLookup, nodeMatches, pathOfMatch, resultFromPaths, searchSteps, type SearchResult,
+} from './search';
 import { stringifyJson } from './serialize';
 import { fontStack, rowHeightFor, type Settings, type Theme } from './settings';
 import { resolveShortcut } from './shortcuts';
+import { TableView } from './table';
+import { isTabular, VALUE_COLUMN } from './tabular';
 import { expandByBudget, formatJsonPointer, formatJsPath, formatPath, isContainerValue, pathOf, TreeModel, type TNode } from './tree';
 import { EXPAND_LIMIT, TreeView } from './view';
 
 /** Longest a search may hold the main thread before yielding a frame. */
 const SEARCH_SLICE_MS = 12;
+/** Most matches a JSONPath query collects; beyond this the count says "first N". */
+const QUERY_LIMIT = 100_000;
 
 export interface MountOptions {
   settings: Settings;
@@ -128,6 +135,11 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   let current = -1;
   let searchedFor = '';
   let filterMode = false;
+  /** Filter mode was switched on by a JSONPath query, not by the user. */
+  let autoFilter = false;
+  let isMatch: ((node: TNode) => boolean) | null = null;
+  let queryMode = false;
+  let queryTruncated = false;
   let job = 0;
   let debounce: ReturnType<typeof setTimeout> | undefined;
 
@@ -146,8 +158,9 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   const input = el('input', 'jvp-search');
   input.type = 'search';
   input.id = 'jvp-search';
-  input.placeholder = 'Search keys and values… (/)';
-  input.setAttribute('aria-label', 'Search keys and values');
+  input.placeholder = 'Search, or a JSONPath like $..email (/)';
+  input.setAttribute('aria-label', 'Search keys and values, or run a JSONPath query');
+  input.title = 'Plain text searches keys and values. Start with $ for a JSONPath query: $.data[*].email, $..price, $.items[?(@.price < 10)]';
   input.spellcheck = false;
   input.autocomplete = 'off';
   const prevBtn = button('↑', 'Previous match (Shift+Enter)');
@@ -191,6 +204,8 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   const sortBtn = button('Sort keys', 'Show object keys in alphabetical order. View only: copies keep the original order.');
   sortBtn.classList.add('jvp-tree-only');
   sortBtn.setAttribute('aria-pressed', 'false');
+  const tableBtn = button('Table', 'Show the selected array of objects as a table');
+  tableBtn.classList.add('jvp-tree-only');
 
   const wrapBtn = button('Wrap', 'Wrap long lines');
   wrapBtn.classList.add('jvp-raw-only');
@@ -220,7 +235,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
     );
   }
   info.append(el('span', 'jvp-size', sizeLabel(doc, opts)));
-  toolbar.append(searchGroup, filterBtn, rawBtn, copyGroup, levels, sortBtn, wrapBtn, linesBtn, info);
+  toolbar.append(searchGroup, filterBtn, rawBtn, copyGroup, levels, sortBtn, tableBtn, wrapBtn, linesBtn, info);
 
   // ----- header: path bar -----
   const pathbar = el('div', 'jvp-pathbar jvp-tree-only');
@@ -270,6 +285,51 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
 
   const main = el('main', 'jvp-main');
   let view: TreeView;
+  let table: TableView | null = null;
+
+  /** The array a Table would show: the selection or its nearest array-of-objects ancestor, else the document. */
+  const tableTarget = (): TNode | null => {
+    for (let n = view?.selectedNode ?? null; n; n = n.parent) if (isTabular(n.value)) return n;
+    return isTabular(doc.value) ? model.root : null;
+  };
+  const updateTableBtn = () => {
+    const t = tableTarget();
+    tableBtn.disabled = !t;
+    tableBtn.title = t ? `Show ${formatPath(pathOf(t))} as a table` : 'Select an array of objects to see it as a table';
+  };
+  const closeTable = () => {
+    if (!table) return;
+    table.destroy();
+    table = null;
+    root.classList.remove('jvp-mode-table');
+    view.el.classList.remove('jvp-hidden');
+    view.refresh();
+  };
+  const showTable = (node: TNode) => {
+    closeTable();
+    const path = pathOf(node);
+    table = new TableView(node.value as unknown[], formatPath(path), {
+      lossless,
+      copy: (text, what) => copy(text, what),
+      close: closeTable,
+      reveal: (row, column) => {
+        closeTable();
+        const target = column === null || column === VALUE_COLUMN ? [...path, row] : [...path, row, column];
+        const index = model.reveal(target);
+        view.refresh();
+        if (index >= 0) {
+          view.select(index, false);
+          view.scrollToRow(index, 'center');
+          view.el.focus({ preventScroll: true });
+        }
+      },
+    });
+    root.classList.add('jvp-mode-table');
+    view.el.classList.add('jvp-hidden');
+    main.append(table.el);
+    window.scrollTo(0, 0);
+    table.setMetrics(ctx.settings().fontSize, rowHeightFor(ctx.settings().fontSize));
+  };
 
   const rowMenu = (node: TNode, anchor: HTMLElement) => {
     const path = pathOf(node);
@@ -279,6 +339,8 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
       { label: 'Copy value', hint: node.isContainer ? 'formatted JSON' : 'as JSON', action: () => copyValue(node) },
       node.kind === 'string' ? { label: 'Copy text', hint: 'without quotes', action: () => copy(node.value as string, 'text') } : null,
       node.isContainer ? { label: 'Copy minified', hint: 'one line', action: () => copy(stringifyJson(node.value, 0, lossless), 'minified value') } : null,
+      isTabular(node.value) ? 'separator' : null,
+      isTabular(node.value) ? { label: 'Show as table', hint: `${formatNumber(node.size)} rows`, action: () => showTable(node) } : null,
       'separator',
       { label: 'Copy JSONPath', hint: short(formatPath(path)), action: () => copyPath(node) },
       { label: 'Copy JS path', hint: path.length ? short(formatJsPath(path)) : 'n/a for the root', disabled: !path.length, action: () => copy(formatJsPath(path), 'JS path') },
@@ -323,7 +385,10 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
     isCurrent,
     topInset: () => header.offsetHeight,
     onLimit: (expandFully) => showNotice(limitText, 'Expand everything', expandFully),
-    onSelect: updatePath,
+    onSelect: (node) => {
+      updatePath(node);
+      updateTableBtn();
+    },
     onMenu: rowMenu,
     onCopy: (node, what) => (what === 'value' ? copyValue(node) : copyPath(node)),
     imagePreview: () => ctx.settings().imagePreview,
@@ -334,7 +399,12 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   root.classList.add('jvp-mode-tree');
   root.append(header, main, status);
   updatePath(null);
+  updateTableBtn();
   view.refresh();
+  tableBtn.addEventListener('click', () => {
+    const t = tableTarget();
+    if (t) showTable(t);
+  });
 
   copyPathBtn.addEventListener('click', () => view.selectedNode && copyPath(view.selectedNode));
   pathMenuBtn.addEventListener('click', () => view.selectedNode && rowMenu(view.selectedNode, pathMenuBtn));
@@ -342,11 +412,15 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   ctx.onSettings((s) => {
     view.setRowHeight(rowHeightFor(s.fontSize));
     raw?.setMetrics(s.fontSize, rowHeightFor(s.fontSize));
+    table?.setMetrics(s.fontSize, rowHeightFor(s.fontSize));
   });
 
   // ----- search -----
   const updateCount = () => {
-    count.textContent = re && result ? formatMatchCount(result.count, current, result.done) : '';
+    count.classList.remove('jvp-count-error');
+    count.title = '';
+    const more = queryMode && queryTruncated ? ` (first ${formatNumber(QUERY_LIMIT)})` : '';
+    count.textContent = result ? formatMatchCount(result.count, current, result.done) + more : '';
     const any = !!result && result.count > 0;
     prevBtn.disabled = !any;
     nextBtn.disabled = !any;
@@ -366,10 +440,10 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   };
 
   const applyFilter = () => {
-    if (filterMode && re && result && result.done) {
+    if (filterMode && isMatch && result && result.done) {
       const res = result;
       model.expandWhere((n) => isContainerValue(n.value) && res.parents.has(n.value), false);
-      model.setFilter(filterIncludes(res, re));
+      model.setFilter(filterIncludes(res, isMatch));
       view.refresh();
       window.scrollTo(window.scrollX, 0);
     } else if (!filterMode && model.filtered) {
@@ -386,16 +460,59 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
     if (q === searchedFor) return false;
     searchedFor = q;
     const my = ++job;
-    re = compileQuery(q);
     current = -1;
+    queryTruncated = false;
+    const wasQuery = queryMode;
+    queryMode = looksLikeJsonPath(q);
+    input.classList.toggle('jvp-search-jsonpath', queryMode);
+    if (wasQuery && !queryMode && autoFilter) {
+      autoFilter = false;
+      filterMode = false;
+      filterBtn.setAttribute('aria-pressed', 'false');
+    }
+
+    if (queryMode) {
+      re = null;
+      const compiled = compileJsonPath(q);
+      if (!compiled.ok) {
+        result = null;
+        isMatch = null;
+        if (model.filtered) model.setFilter(null);
+        view.refresh();
+        updateCount();
+        count.textContent = `JSONPath: ${compiled.error.message}`;
+        count.title = `${compiled.error.message} (at character ${compiled.error.offset + 1})`;
+        count.classList.add('jvp-count-error');
+        return true;
+      }
+      const run = compiled.run(doc.value, QUERY_LIMIT);
+      result = resultFromPaths(doc.value, run.paths);
+      isMatch = matchLookup(result);
+      queryTruncated = run.truncated;
+      // Query results are shown as a filtered tree; the Filter button turns that off.
+      if (!filterMode) {
+        filterMode = true;
+        autoFilter = true;
+        filterBtn.setAttribute('aria-pressed', 'true');
+      }
+      applyFilter();
+      if (result.count > 0) goTo(0);
+      else view.refresh();
+      updateCount();
+      return true;
+    }
+
+    re = compileQuery(q);
     if (!re) {
       result = null;
+      isMatch = null;
       if (model.filtered) model.setFilter(null);
       view.refresh();
       updateCount();
       return true;
     }
     const rx = re;
+    isMatch = (n) => nodeMatches(n, rx);
     const res = (result = emptyResult());
     const steps = searchSteps(doc.value, rx, res, 4000, model.sortKeys);
     const pump = () => {
@@ -451,6 +568,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
 
   filterBtn.addEventListener('click', () => {
     filterMode = !filterMode;
+    autoFilter = false;
     filterBtn.setAttribute('aria-pressed', String(filterMode));
     if (filterMode && input.value.trim() !== searchedFor) runSearch();
     else applyFilter();
@@ -460,6 +578,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   const showingRaw = () => root.classList.contains('jvp-mode-raw');
 
   rawBtn.addEventListener('click', () => {
+    closeTable();
     const toRaw = !showingRaw();
     if (toRaw && !raw) {
       raw = new RawView(doc.raw);
@@ -530,7 +649,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
     sortBtn.setAttribute('aria-pressed', String(on));
     view.refresh();
     if (re) {
-      searchedFor = ' '; // matches now come in a different order: search again
+      searchedFor = '\u0000'; // matches now come in a different order: search again
       runSearch();
     }
   });
@@ -539,6 +658,13 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   document.addEventListener('keydown', (e) => {
     const target = e.target as HTMLElement | null;
     const inInput = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+    if (table) {
+      if (e.key === 'Escape' && !inInput) {
+        e.preventDefault();
+        closeTable();
+      }
+      return;
+    }
     const action = resolveShortcut(e, inInput);
     if (!action) return;
     if (showingRaw() && action !== 'clear-search') return;

@@ -15,6 +15,8 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 - Collapsible tree view with syntax highlighting and item counts on collapsed nodes; opens as much of the document as fits in about 1,500 rows
 - Search across keys and values with a live match count; Enter / Shift+Enter step through matches, opening the tree to each one
 - Filter mode — hide every row that does not match the search
+- JSONPath queries in the same box — start with `$`: `$.data[*].email`, `$..price`, `$.items[?(@.price < 10 && @.inStock)]`. Results show as a filtered tree with a count, Enter steps through them. A small hand-written evaluator (members, `*`, indices, slices, `..`, unions, filters with `== != < <= > >= && || !`), never `eval`; big integers compare exactly
+- Table view for arrays of objects — one column per key, sortable (numbers numerically, big integers exactly), nested values as compact previews that open into formatted JSON, 60,000 rows without slowing down; open it from the toolbar or a row's menu
 - Full keyboard control of the tree — arrow keys move and open/close, Home/End jump, Enter toggles, `*` opens a whole subtree — built as a proper WAI-ARIA tree for screen readers
 - Path bar — the selected node's path as clickable breadcrumbs; copy it as JSONPath (`$.data[3].email`), a JS accessor (`data[3].email`) or a JSON Pointer (`/data/3/email`)
 - Copy any node as valid JSON — never a "3 items" placeholder, never stripped quotes — or copy/download the whole document formatted, minified or raw
