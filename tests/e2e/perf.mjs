@@ -92,11 +92,17 @@ async function firstRender(dir, fixture) {
     await within(ctx.close(), 10000);
     return { ms, longest: '-', heap: '-', dom: '-' };
   }
-  await page.waitForTimeout(1000);
-  const lt = await takeLongTasks(page);
-  const out = { ms, longest: `${Math.max(0, ...lt)} ms`, heap: `${await heapMB(ctx, page)} MB`, dom: await page.evaluate(() => document.getElementsByTagName('*').length) };
-  await ctx.close();
-  return out;
+  try {
+    await sleep(1000);
+    const lt = await within(takeLongTasks(page), 5000, null);
+    if (!lt) return { ms, longest: 'unresponsive after render', heap: '-', dom: '-' };
+    return { ms, longest: `${Math.max(0, ...lt)} ms`, heap: `${await heapMB(ctx, page)} MB`, dom: await page.evaluate(() => document.getElementsByTagName('*').length) };
+  } catch (e) {
+    // e.g. an older build whose renderer dies after first paint
+    return { ms, longest: `page crashed after render (${String(e.message).split('\n')[0].slice(0, 60)})`, heap: '-', dom: '-' };
+  } finally {
+    await within(ctx.close().catch(() => {}), 10000);
+  }
 }
 
 async function interactions(dir) {
