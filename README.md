@@ -126,6 +126,7 @@ This extension:
 - Stores settings locally using Chrome's storage API
 - Makes no network requests of its own
 - Exposes no web-accessible resources, so web pages cannot probe for it
+- Asks for one API permission, `storage`. Chrome still shows "Read and change all your data on all websites", because the content script has to run on every page to recognise JSON; on ordinary pages it checks the content type and stops without reading the page
 - Shows image thumbnails only when you hover an image URL, loading the image from its own address (with no referrer); this can be turned off in the options
 - See our full [Privacy Policy](PRIVACY_POLICY.md)
 
@@ -147,39 +148,72 @@ The rules are unit-tested in `tests/privacy.test.ts`.
 
 ## Store Listing Copy
 
-> Title and Short Description below mirror `public/_locales/en/messages.json`
-> (`appName` / `appDescription`) — that file is what the store actually renders,
-> so change it there first and copy the result here.
+> `store/cws.json` holds the listing fields. The Title and Short Description are
+> `appName` / `appDescription` in `public/_locales/en/messages.json`, which is what
+> the store renders, so change them there first and copy the result here. Uploading
+> listing text and images in the Chrome Web Store dashboard is a manual step.
 
 ### Title
 JSON Viewer Pro - Formatter, Beautifier & API Response Viewer
 
 ### Short Description
-Fast, private JSON viewer with tree view, search, and syntax highlighting. No tracking, no ads, no popups. Open source.
+JSON viewer and formatter: fast tree view for huge files, dark mode, JSONPath search, exact big numbers. No tracking. Open source.
 
 ### Detailed Description
-JSON Viewer Pro automatically detects and formats JSON responses in your browser.
+```text
+JSON Viewer Pro turns any JSON response into a fast, readable tree. It is a JSON formatter and viewer that stays quick on huge files, keeps big numbers exact, and never tracks you. Free, with no account.
 
-Features:
-- Collapsible tree view with syntax highlighting
-- Search across keys and values with highlighting and a live match count
-- Filter mode — show only the rows that match your search
-- Keyboard shortcuts for search, expand all, and collapse all
-- Copy individual values or full JSON paths
-- Toggle between formatted tree view and the raw response
-- Light, dark, and auto themes (follows your system preference)
-- URL detection — clickable links in string values
-- File size display in the toolbar
+TREE VIEW AND FORMATTER
+- Formats JSON automatically: application/json, the +json types, and JSON sent as text/plain or JavaScript (JSONP included)
+- Collapsible tree with syntax colours, item counts, clickable links, readable dates and colour swatches
+- Light, dark and system themes; pick the font, text size and indentation, applied instantly without reloading
+- Raw view of the untouched response, with line numbers and wrapping
 
-Why JSON Viewer Pro?
-- Zero tracking or analytics — your data stays on your device
-- No ads, donation popups, or injected content
-- Fast and lightweight
-- Clean, modern UI with dark mode support
-- Open source
+BIG FILES WITHOUT FREEZING
+- Opens a 16 MB, 60,000-object document in well under a second and stays responsive while you scroll, search and expand everything
+- Only the rows on screen are drawn, so a bigger file does not mean a slower page
+
+FIND ANYTHING
+- Search keys and values with a live match count; Enter jumps to each match
+- Filter mode shows just the matches and the structure around them
+- JSONPath queries in the same box: $.data[*].email, $..price, $.items[?(@.price < 10)]
+- Table view turns an array of objects into a sortable table
+
+EXACT AND CORRECT
+- Big numbers stay exact: IDs like 149883901923910003 are shown, searched and copied as sent, never rounded
+- Invalid JSON gets an error view with the message, line and column, plus an option to parse leniently (comments and trailing commas)
+- Copy any value as valid JSON, copy its path as JSONPath, a JS accessor or a JSON Pointer, or download the document
+
+KEYBOARD AND ACCESSIBILITY
+- Full keyboard navigation of the tree (arrow keys, Home and End, Enter, *), built as an accessible tree for screen readers
+- Shortcuts: / to search, e and c to expand and collapse everything, 1 to 3 to show that many levels
+
+A VIEWER PAGE OF ITS OWN
+- Paste JSON, open a file or drop one: JSON, JSON with comments and NDJSON, validated as you type, with Format and Minify
+
+PRIVATE, AND YOU CAN CHECK
+- No tracking, analytics, ads or donation popups, and no network requests of its own
+- Open source: https://github.com/brightbar-dev/json-viewer-pro
+- Every build runs an automated check that fails if the code contains a network API, a remote address or code built from strings
+- One API permission, storage, for your settings
+- Hovering an image URL shows a thumbnail loaded from that address; you can turn previews off in the options
+
+WHY CHROME SAYS "READ AND CHANGE ALL YOUR DATA ON ALL WEBSITES"
+To recognise a JSON response, the extension has to look at every page you open. On ordinary pages it checks the page's content type and stops, without reading the page. On a JSON response it reads the response in order to display it. Nothing is sent anywhere.
+```
+
+### Screenshots and promo tiles
+- `store/screenshots/01-tree-view.png` … `05-exact-big-numbers.png`: 1280×800, RGB, no alpha
+- `store/promo/small-440x280.png` and `store/promo/marquee-1400x560.png`: RGB, no alpha
+- All are captured from the real built extension by `store/capture/capture.mjs`, using fictional data in `store/capture/fixtures/`. Re-run it after any visible change to the viewer and commit what it writes:
+
+```bash
+npx wxt build
+PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs CHROME="/path/to/Google Chrome for Testing" node store/capture/capture.mjs
+```
 
 ### Category
 Developer Tools
 
 ### Search Keywords
-json, json viewer, json formatter, json editor, json tree, json pretty print, api response viewer, developer tools
+json viewer, json formatter, json tree view, json beautifier, pretty print json, jsonpath, json table, large json files, dark mode, api response viewer, developer tools
