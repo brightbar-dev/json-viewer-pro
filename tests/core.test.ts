@@ -1,46 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import {
-  formatSize,
-  generatePath,
-  isUrl,
-  matchesQuery,
-  formatMatchCount,
-  computeVisibleNodes,
-  resolveShortcut,
-} from '../entrypoints/content';
-
-// ========== JSON Detection ==========
-describe('JSON parsing', () => {
-  function tryParseJson(text: string) {
-    try { return JSON.parse(text); }
-    catch { return null; }
-  }
-
-  it('parses simple object', () => expect(tryParseJson('{"key": "value"}')).not.toBeNull());
-  it('parses nested object', () => expect(tryParseJson('{"a": {"b": {"c": 1}}}')).not.toBeNull());
-  it('parses array', () => expect(tryParseJson('[1, 2, 3]')).not.toBeNull());
-  it('parses empty object', () => expect(tryParseJson('{}')).not.toBeNull());
-  it('parses empty array', () => expect(tryParseJson('[]')).not.toBeNull());
-  it('parses string', () => expect(tryParseJson('"hello"')).toBe('hello'));
-  it('parses number', () => expect(tryParseJson('42')).toBe(42));
-  it('parses boolean true', () => expect(tryParseJson('true')).toBe(true));
-  it('parses boolean false', () => expect(tryParseJson('false')).toBe(false));
-  it('parses null', () => expect(tryParseJson('null')).toBeNull());
-  it('rejects plain text', () => expect(tryParseJson('hello world')).toBeNull());
-  it('rejects HTML', () => expect(tryParseJson('<html></html>')).toBeNull());
-  it('rejects incomplete JSON', () => expect(tryParseJson('{"key":')).toBeNull());
-  it('rejects trailing comma', () => expect(tryParseJson('{"a": 1,}')).toBeNull());
-  it('rejects single quotes', () => expect(tryParseJson("{'a': 1}")).toBeNull());
-
-  it('parses 1000-key object', () => {
-    const obj: Record<string, string> = {};
-    for (let i = 0; i < 1000; i++) obj['key' + i] = 'value' + i;
-    expect(tryParseJson(JSON.stringify(obj))).not.toBeNull();
-  });
-
-  it('parses unicode escapes', () => expect(tryParseJson('{"emoji": "\\u2764"}')).not.toBeNull());
-  it('parses actual unicode', () => expect(tryParseJson('{"emoji": "\u2764"}')).not.toBeNull());
-});
+import { formatCount, formatMatchCount, formatNumber, formatSize, isUrl, utf8Length } from '../lib/format';
+import { normalizeSettings } from '../lib/settings';
+import { resolveShortcut } from '../lib/shortcuts';
+import { formatPath } from '../lib/tree';
 
 // ========== URL Detection ==========
 describe('URL detection', () => {
@@ -53,19 +15,23 @@ describe('URL detection', () => {
   it('rejects javascript URI', () => expect(isUrl('javascript:alert(1)')).toBe(false));
 });
 
-// ========== Path Generation ==========
-describe('path generation', () => {
-  it('simple key', () => expect(generatePath('$', 'name')).toBe('$.name'));
-  it('nested key', () => expect(generatePath('$.user', 'email')).toBe('$.user.email'));
-  it('key with spaces', () => expect(generatePath('$', 'full name')).toBe('$["full name"]'));
-  it('key with dots', () => expect(generatePath('$', 'a.b')).toBe('$["a.b"]'));
-  it('key starting with number', () => expect(generatePath('$', '0key')).toBe('$["0key"]'));
-  it('key with dashes', () => expect(generatePath('$', 'foo-bar')).toBe('$["foo-bar"]'));
-  it('underscore key', () => expect(generatePath('$', '_private')).toBe('$._private'));
-  it('dollar key', () => expect(generatePath('$', '$ref')).toBe('$.$ref'));
+// ========== Path formatting ==========
+describe('path formatting', () => {
+  it('root', () => expect(formatPath([])).toBe('$'));
+  it('simple key', () => expect(formatPath(['name'])).toBe('$.name'));
+  it('nested key', () => expect(formatPath(['user', 'email'])).toBe('$.user.email'));
+  it('key with spaces', () => expect(formatPath(['full name'])).toBe('$["full name"]'));
+  it('key with dots', () => expect(formatPath(['a.b'])).toBe('$["a.b"]'));
+  it('key starting with number', () => expect(formatPath(['0key'])).toBe('$["0key"]'));
+  it('key with dashes', () => expect(formatPath(['foo-bar'])).toBe('$["foo-bar"]'));
+  it('underscore key', () => expect(formatPath(['_private'])).toBe('$._private'));
+  it('dollar key', () => expect(formatPath(['$ref'])).toBe('$.$ref'));
+  it('array indices', () => expect(formatPath(['data', 3, 'email'])).toBe('$.data[3].email'));
+  it('a numeric-looking object key stays a string', () => expect(formatPath(['3'])).toBe('$["3"]'));
+  it('quotes inside a key are escaped', () => expect(formatPath(['say "hi"'])).toBe('$["say \\"hi\\""]'));
 });
 
-// ========== Size Formatting ==========
+// ========== Size and count formatting ==========
 describe('size formatting', () => {
   it('formats bytes', () => expect(formatSize(500)).toBe('500 B'));
   it('formats KB', () => expect(formatSize(2048)).toBe('2.0 KB'));
@@ -75,74 +41,47 @@ describe('size formatting', () => {
   it('formats 1025 bytes', () => expect(formatSize(1025)).toBe('1.0 KB'));
 });
 
-// ========== Search matching ==========
-describe('search matching', () => {
-  it('matches a substring', () => expect(matchesQuery('"userName"', 'user')).toBe(true));
-  it('is case-insensitive on the haystack', () => expect(matchesQuery('"UserName"', 'user')).toBe(true));
-  it('rejects a non-match', () => expect(matchesQuery('"userName"', 'zzz')).toBe(false));
-  it('empty query never matches', () => expect(matchesQuery('anything', '')).toBe(false));
-  it('null haystack never matches', () => expect(matchesQuery(null, 'a')).toBe(false));
-  it('undefined haystack never matches', () => expect(matchesQuery(undefined, 'a')).toBe(false));
-  it('matches inside a value', () => expect(matchesQuery('"https://example.com"', 'example')).toBe(true));
-  it('matches a number rendered as text', () => expect(matchesQuery('42', '4')).toBe(true));
+describe('number and count formatting', () => {
+  it('groups thousands', () => expect(formatNumber(1234567)).toBe('1,234,567'));
+  it('leaves small numbers alone', () => expect(formatNumber(999)).toBe('999'));
+  it('one item', () => expect(formatCount('array', 1)).toBe('1 item'));
+  it('many items', () => expect(formatCount('array', 60000)).toBe('60,000 items'));
+  it('one key', () => expect(formatCount('object', 1)).toBe('1 key'));
+  it('zero keys', () => expect(formatCount('object', 0)).toBe('0 keys'));
+});
+
+describe('UTF-8 length', () => {
+  it('ASCII', () => expect(utf8Length('hello')).toBe(5));
+  it('two-byte', () => expect(utf8Length('é')).toBe(2));
+  it('three-byte', () => expect(utf8Length('日本')).toBe(6));
+  it('surrogate pair is four bytes', () => expect(utf8Length('😀')).toBe(4));
+  it('matches TextEncoder on mixed text', () => {
+    const s = 'naïve café — 日本語 😀 {"a":1}';
+    expect(utf8Length(s)).toBe(new TextEncoder().encode(s).length);
+  });
 });
 
 describe('match count formatting', () => {
   it('zero', () => expect(formatMatchCount(0)).toBe('No matches'));
   it('one is singular', () => expect(formatMatchCount(1)).toBe('1 match'));
   it('two is plural', () => expect(formatMatchCount(2)).toBe('2 matches'));
-  it('many', () => expect(formatMatchCount(137)).toBe('137 matches'));
+  it('many', () => expect(formatMatchCount(1370)).toBe('1,370 matches'));
+  it('shows the position of the selected match', () => expect(formatMatchCount(57, 2)).toBe('3 of 57'));
+  it('marks a search that is still running', () => expect(formatMatchCount(120, -1, false)).toBe('120+ \u2026'));
+  it('a running search with nothing yet', () => expect(formatMatchCount(0, -1, false)).toBe('0 \u2026'));
 });
 
-// ========== Filter visibility ==========
-describe('filter visibility', () => {
-  // Tree: 0 root -> 1 "user" -> 2 "name", 3 "id"; 0 -> 4 "meta"
-  const parents = [null, 0, 1, 1, 0];
-
-  it('no matches means nothing visible', () => {
-    const v = computeVisibleNodes(parents, [false, false, false, false, false]);
-    expect(v.size).toBe(0);
-  });
-
-  it('keeps a match and its ancestors', () => {
-    const v = computeVisibleNodes(parents, [false, false, true, false, false]);
-    expect([...v].sort()).toEqual([0, 1, 2]);
-  });
-
-  it('keeps descendants of a matching node', () => {
-    const v = computeVisibleNodes(parents, [false, true, false, false, false]);
-    expect([...v].sort()).toEqual([0, 1, 2, 3]);
-  });
-
-  it('hides unrelated siblings', () => {
-    const v = computeVisibleNodes(parents, [false, false, true, false, false]);
-    expect(v.has(4)).toBe(false);
-    expect(v.has(3)).toBe(false);
-  });
-
-  it('a root match keeps the whole tree', () => {
-    const v = computeVisibleNodes(parents, [true, false, false, false, false]);
-    expect(v.size).toBe(5);
-  });
-
-  it('handles multiple matches in different branches', () => {
-    const v = computeVisibleNodes(parents, [false, false, true, false, true]);
-    expect([...v].sort()).toEqual([0, 1, 2, 4]);
-  });
-
-  it('handles a flat list of roots', () => {
-    const v = computeVisibleNodes([null, null, null], [false, true, false]);
-    expect([...v]).toEqual([1]);
-  });
-
-  it('handles an empty tree', () => {
-    expect(computeVisibleNodes([], []).size).toBe(0);
-  });
+// ========== Settings ==========
+describe('settings normalisation', () => {
+  it('defaults when missing', () => expect(normalizeSettings(undefined)).toEqual({ enabled: true, theme: 'auto' }));
+  it('keeps valid values', () => expect(normalizeSettings({ enabled: false, theme: 'dark' })).toEqual({ enabled: false, theme: 'dark' }));
+  it('repairs a bad theme', () => expect(normalizeSettings({ enabled: true, theme: 'neon' }).theme).toBe('auto'));
+  it('repairs a non-boolean enabled', () => expect(normalizeSettings({ enabled: 'yes' }).enabled).toBe(true));
 });
 
 // ========== Keyboard shortcuts ==========
 describe('keyboard shortcuts', () => {
-  const key = (k: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean }> = {}) =>
+  const key = (k: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }> = {}) =>
     ({ key: k, ctrlKey: false, metaKey: false, ...mods });
 
   it('Cmd+F focuses search', () =>
@@ -159,6 +98,10 @@ describe('keyboard shortcuts', () => {
     expect(resolveShortcut(key('Escape'), true)).toBe('clear-search'));
   it('Escape works outside the input too', () =>
     expect(resolveShortcut(key('Escape'), false)).toBe('clear-search'));
+  it('Cmd+G steps to the next match', () =>
+    expect(resolveShortcut(key('g', { metaKey: true }), true)).toBe('next-match'));
+  it('Shift+Ctrl+G steps to the previous match', () =>
+    expect(resolveShortcut(key('G', { ctrlKey: true, shiftKey: true }), false)).toBe('prev-match'));
   it('e expands all', () => expect(resolveShortcut(key('e'), false)).toBe('expand-all'));
   it('c collapses all', () => expect(resolveShortcut(key('c'), false)).toBe('collapse-all'));
   it('does not hijack Cmd+C', () =>

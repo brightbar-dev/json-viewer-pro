@@ -4,13 +4,19 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 
 ## Features
 
-- Auto-detect JSON pages in Chrome
-- Collapsible tree view with syntax highlighting
-- Search across keys and values, with a live match count
+- Auto-detects JSON responses: `application/json`, `text/json`, and the `application/*+json` family (JSON-LD, problem+json, JSON:API…)
+- Also handles JSON served with the wrong content type (`text/plain`, `text/javascript`, `application/javascript`) — but only when the body really parses
+- Unwraps JSONP (`callback({...})`, callback name shown) and anti-XSSI prefixes (`)]}'`, `while(1);`)
+- NDJSON / JSON Lines served as text is shown as an array of its lines
+- Large documents stay fast: a 16.7 MB, 60,000-object file renders in about a tenth of a second and stays responsive while you scroll, search and expand everything, because only the rows on screen are ever put in the page
+- Exact big numbers — integers beyond 2^53 (snowflake IDs, 64-bit keys) and long decimals are shown, searched and copied exactly as sent, never rounded
+- Invalid JSON gets an error view: the parser message, line and column, a highlighted excerpt, and the raw body
+- Collapsible tree view with syntax highlighting and item counts on collapsed nodes; opens as much of the document as fits in about 1,500 rows
+- Search across keys and values with a live match count; Enter / Shift+Enter step through matches, opening the tree to each one
 - Filter mode — hide every row that does not match the search
-- Keyboard shortcuts — `/` or `Ctrl/Cmd+F` to search, `Esc` to clear, `e`/`c` to expand/collapse all
-- Copy individual values or JSONPath-style paths
-- Toggle between formatted tree view and the raw response body
+- Keyboard shortcuts — `/` or `Ctrl/Cmd+F` to search, `Enter` or `Ctrl/Cmd+G` for the next match, `Esc` to clear, `e`/`c` to expand/collapse all
+- Copy individual values (exactly) or JSONPath-style paths; `Alt`+click a node to expand or collapse its whole subtree
+- Toggle between the tree view and the raw response body
 - Light, dark, and auto (system) themes
 - URL detection — clickable links in string values
 - File size display
@@ -20,12 +26,16 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 | Key | Action |
 |-----|--------|
 | `/` or `Ctrl/Cmd+F` | Focus the search box |
+| `Enter` / `Shift+Enter` (in the search box) | Next / previous match |
+| `Ctrl/Cmd+G` / `Shift+Ctrl/Cmd+G` | Next / previous match |
 | `Esc` | Clear the search and unfocus |
 | `e` | Expand all nodes |
 | `c` | Collapse all nodes |
+| `Alt`+click | Expand or collapse a whole subtree |
 
 `Ctrl/Cmd+F` is handled by the viewer on purpose: the browser's own find cannot
-reach text inside collapsed nodes, and the built-in search expands matches.
+reach text inside collapsed or off-screen nodes, and the built-in search opens
+the tree to each match.
 
 ## Installation
 
@@ -52,10 +62,29 @@ npm test          # Vitest, one run
 npm run test:watch
 ```
 
-Tests run under Vitest with the WXT testing plugin. They live in
-`tests/core.test.ts` and cover the exported pure helpers: JSON parsing, URL
-detection, path generation, size formatting, search matching, filter
-visibility, and keyboard-shortcut resolution.
+Tests run under Vitest with the WXT testing plugin, in Node with no DOM. The
+logic lives in pure modules under `lib/` — the parser, lossless numbers,
+content-type detection, the tree model, search, serialisation — and each has a
+test file in `tests/`.
+
+### Performance check (local, not in CI)
+
+`tests/e2e/perf.mjs` loads the built extension into Chrome for Testing,
+generates its own fixtures (including a 16.7 MB, 60,000-object document) and
+prints markdown tables: first render, long tasks, JS heap and DOM size per
+fixture; scroll, search, filter and expand-all timings on the large document;
+and the extension's cost on an ordinary HTML page. CI has no browser, so it is a
+local script:
+
+```bash
+npm run build
+PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs \
+CHROME="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
+node tests/e2e/perf.mjs                      # or: node tests/e2e/perf.mjs main=/path/to/old-build new=.output/chrome-mv3
+```
+
+Chrome-branded builds ignore `--load-extension`, so it has to be Chrome for
+Testing (`npx playwright install chromium` downloads one).
 
 <!-- Deliberately no test COUNT here. Both branches merged into this file had
      independently rewritten this section, and one of them wrote "77 unit
@@ -70,6 +99,8 @@ This extension:
 - Does NOT track your browsing
 - Does NOT inject ads, donation popups, or promotional content
 - Stores settings locally using Chrome's storage API
+- Makes no network requests of its own
+- Exposes no web-accessible resources, so web pages cannot probe for it
 - See our full [Privacy Policy](PRIVACY_POLICY.md)
 
 ## Store Listing Copy
