@@ -1,0 +1,148 @@
+{
+  "object": "list",
+  "url": "/v2/orders",
+  "has_more": true,
+  "total_count": 1284,
+  "request_id": 149883901923910003,
+  "generated_at": "2026-09-15T08:02:41.318Z",
+  "data": [
+    {
+      "id": "ord_7Hq2xPz9LmA4",
+      "status": "fulfilled",
+      "created": 1757923200,
+      "currency": "usd",
+      "amount_total": 12850,
+      "customer": {
+        "id": "cus_R3mVt8Kq",
+        "name": "Ada Lovelace",
+        "email": "ada@analytical.example",
+        "country": "GB",
+        "vip": true
+      },
+      "items": [
+        { "sku": "KB-75-BRN", "name": "Mechanical keyboard, brown switches", "quantity": 1, "unit_amount": 11900 },
+        { "sku": "CBL-USBC-2M", "name": "Braided USB-C cable, 2 m", "quantity": 1, "unit_amount": 950 }
+      ],
+      "shipping": {
+        "carrier": "Royal Mail",
+        "tracking": "RM482913377GB",
+        "delivered_at": "2026-09-12T14:21:09Z",
+        "address": { "line1": "12 St James's Square", "city": "London", "postal_code": "SW1Y 4LB" }
+      },
+      "tags": ["priority", "gift"],
+      "brand_color": "#8250df",
+      "receipt_url": "https://shop.example.com/receipts/ord_7Hq2xPz9LmA4",
+      "metadata": { "channel": "web", "coupon": null }
+    },
+    {
+      "id": "ord_9Km4bWc1QeT7",
+      "status": "processing",
+      "created": 1757926812,
+      "currency": "eur",
+      "amount_total": 4390,
+      "customer": {
+        "id": "cus_L9pXw2Hn",
+        "name": "Grace Hopper",
+        "email": "grace@navy.example",
+        "country": "US",
+        "vip": false
+      },
+      "items": [
+        { "sku": "MUG-DBG-350", "name": "\"It's not a bug\" mug", "quantity": 2, "unit_amount": 1495 },
+        { "sku": "STK-PACK-10", "name": "Sticker pack", "quantity": 1, "unit_amount": 1400 }
+      ],
+      "shipping": {
+        "carrier": "DHL",
+        "tracking": null,
+        "delivered_at": null,
+        "address": { "line1": "1 Harbor Way", "city": "Arlington", "postal_code": "22202" }
+      },
+      "tags": [],
+      "brand_color": "#1a7f37",
+      "receipt_url": "https://shop.example.com/receipts/ord_9Km4bWc1QeT7",
+      "metadata": { "channel": "mobile", "coupon": "AUTUMN15" }
+    },
+    {
+      "id": "ord_2Pv8nRs5YhD3",
+      "status": "refunded",
+      "created": 1757930455,
+      "currency": "usd",
+      "amount_total": 21999,
+      "customer": {
+        "id": "cus_T7qMz4Bv",
+        "name": "Katherine Johnson",
+        "email": "katherine@orbit.example",
+        "country": "US",
+        "vip": true
+      },
+      "items": [
+        { "sku": "MON-27-4K", "name": "27\" 4K monitor", "quantity": 1, "unit_amount": 21999 }
+      ],
+      "shipping": {
+        "carrier": "UPS",
+        "tracking": "1Z999AA10123456784",
+        "delivered_at": "2026-09-13T09:05:44Z",
+        "address": { "line1": "300 E Street SW", "city": "Washington", "postal_code": "20546" }
+      },
+      "tags": ["returned"],
+      "brand_color": "#cf222e",
+      "receipt_url": "https://shop.example.com/receipts/ord_2Pv8nRs5YhD3",
+      "metadata": { "channel": "web", "coupon": null }
+    },
+    {
+      "id": "ord_5Jc3tFh8WnB6",
+      "status": "fulfilled",
+      "created": 1757934093,
+      "currency": "gbp",
+      "amount_total": 3200,
+      "customer": {
+        "id": "cus_Q2wNk7Ld",
+        "name": "Alan Turing",
+        "email": "alan@bletchley.example",
+        "country": "GB",
+        "vip": false
+      },
+      "items": [
+        { "sku": "BK-ENIGMA", "name": "Codebreaking, a history (hardback)", "quantity": 1, "unit_amount": 3200 }
+      ],
+      "shipping": {
+        "carrier": "Royal Mail",
+        "tracking": "RM118273645GB",
+        "delivered_at": "2026-09-14T11:40:02Z",
+        "address": { "line1": "Sherwood Drive", "city": "Bletchley", "postal_code": "MK3 6EB" }
+      },
+      "tags": ["priority"],
+      "brand_color": "#0969da",
+      "receipt_url": "https://shop.example.com/receipts/ord_5Jc3tFh8WnB6",
+      "metadata": { "channel": "web", "coupon": null }
+    },
+    {
+      "id": "ord_8Ld6mQz2VkR1",
+      "status": "fulfilled",
+      "created": 1757937711,
+      "currency": "usd",
+      "amount_total": 7425,
+      "customer": {
+        "id": "cus_W5rJv9Tx",
+        "name": "Margaret Hamilton",
+        "email": "margaret@apollo.example",
+        "country": "US",
+        "vip": true
+      },
+      "items": [
+        { "sku": "HDP-ANC-BLK", "name": "Noise-cancelling headphones", "quantity": 1, "unit_amount": 6900 },
+        { "sku": "CASE-HDP", "name": "Hard case", "quantity": 1, "unit_amount": 525 }
+      ],
+      "shipping": {
+        "carrier": "FedEx",
+        "tracking": "449044304137821",
+        "delivered_at": "2026-09-14T16:12:30Z",
+        "address": { "line1": "75 Cambridge Pkwy", "city": "Cambridge", "postal_code": "02142" }
+      },
+      "tags": ["gift"],
+      "brand_color": "#9a6700",
+      "receipt_url": "https://shop.example.com/receipts/ord_8Ld6mQz2VkR1",
+      "metadata": { "channel": "partner", "coupon": "LAUNCH" }
+    }
+  ]
+}

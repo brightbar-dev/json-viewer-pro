@@ -3,6 +3,6 @@
     "message": "JSON Viewer Pro - Formatter, Beautifier & API Response Viewer"
   },
   "appDescription": {
-    "message": "Fast, private JSON viewer with tree view, search, and syntax highlighting. No tracking, no ads, no popups. Open source."
+    "message": "JSON viewer and formatter: fast tree view for huge files, dark mode, JSONPath search, exact big numbers. No tracking. Open source."
   }
 }
