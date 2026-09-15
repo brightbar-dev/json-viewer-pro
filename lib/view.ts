@@ -8,17 +8,17 @@
  *             exist, positioned inside a spacer as tall as the whole list, so
  *             a million rows cost the same to show as sixty.
  *
- * Every row is a flat element carrying its depth in `--d`; one delegated click
- * listener serves them all.
+ * The container is a WAI-ARIA `tree`: it keeps keyboard focus itself and points
+ * `aria-activedescendant` at the selected `treeitem`, so re-rendering rows never
+ * loses focus. Every row is a flat element carrying its depth in `--d`; one
+ * delegated listener per event type serves them all.
  */
-import { copyText } from './dom';
-import { formatCount, formatNumber, isUrl } from './format';
+import { formatCount, formatNumber, formatUtc, isHexColor, isImageUrl, isUrl, relativeTime, timestampMillis } from './format';
 import { LosslessNumber } from './lossless';
 import { primitiveText } from './search';
-import { formatPath, isCloseRow, pathOf, TNode, type Row, type TreeModel } from './tree';
+import { resolveTreeKey } from './shortcuts';
+import { isCloseRow, pathOf, TNode, type Row, type TreeModel } from './tree';
 
-/** Must match `--jvp-row-h` in viewer.css. */
-export const ROW_HEIGHT = 20;
 export const FULL_RENDER_LIMIT = 3000;
 /** Largest spacer we let the page grow to; comfortably below every engine's element-height limit. */
 const MAX_SCROLL_PX = 8_000_000;
@@ -33,12 +33,18 @@ export interface TreeViewHooks {
   highlight(): RegExp | null;
   /** Is `node` the currently selected search match? */
   isCurrent(node: TNode): boolean;
-  /** Height of whatever sticks to the top of the viewport (the toolbar). */
+  /** Height of whatever sticks to the top of the viewport (the header). */
   topInset(): number;
-  /** After the user expands or collapses something. */
-  onToggle?(): void;
   /** A subtree expand stopped at its safety limit; `expandFully` lifts it. */
   onLimit?(expandFully: () => void): void;
+  /** The selected row changed. */
+  onSelect?(node: TNode): void;
+  /** Open the actions menu for `node`, anchored at `anchor`. */
+  onMenu?(node: TNode, anchor: HTMLElement): void;
+  /** Keyboard copy of the selected node: its value as JSON, or its path. */
+  onCopy?(node: TNode, what: 'value' | 'path'): void;
+  /** May hovering an image URL show a thumbnail? */
+  imagePreview?(): boolean;
 }
 
 function span(className: string, text?: string): HTMLSpanElement {
@@ -47,6 +53,8 @@ function span(className: string, text?: string): HTMLSpanElement {
   if (text !== undefined) s.textContent = text;
   return s;
 }
+
+const rowId = (node: TNode) => `jvp-r${node.id}`;
 
 export class TreeView {
   readonly el: HTMLElement;
@@ -57,9 +65,13 @@ export class TreeView {
   private windowFrom = 0;
   private bodyTop = 0;
   private frame = 0;
+  private rowHeight = 20;
   private readonly fullStrings = new WeakSet<TNode>();
   private globalRe: RegExp | null = null;
   private globalReFor: RegExp | null = null;
+  private selected: TNode | null = null;
+  private selIndex = -1;
+  private preview: HTMLElement | null = null;
 
   constructor(
     readonly model: TreeModel,
@@ -68,10 +80,25 @@ export class TreeView {
     this.el = document.createElement('div');
     this.el.className = 'jvp-tree';
     this.el.id = 'jvp-tree';
+    this.el.tabIndex = 0;
+    this.el.setAttribute('role', 'tree');
+    this.el.setAttribute('aria-label', 'JSON document');
     this.body = document.createElement('div');
     this.body.className = 'jvp-rows';
     this.el.appendChild(this.body);
+
     this.el.addEventListener('click', (e) => this.onClick(e));
+    this.el.addEventListener('keydown', (e) => this.onKeyDown(e));
+    this.el.addEventListener('mousedown', () => this.el.classList.remove('jvp-kbd'));
+    this.el.addEventListener('focus', () => {
+      if (!this.selected && this.model.rows.length) this.select(0, false);
+    });
+    this.el.addEventListener('mouseover', (e) => this.onHover(e));
+    this.el.addEventListener('mouseout', (e) => {
+      const from = (e.target as Element).closest?.('.jvp-img-url');
+      const to = (e.relatedTarget as Element | null)?.closest?.('.jvp-img-url');
+      if (from && from !== to) this.hidePreview();
+    });
     window.addEventListener('scroll', () => this.schedule(), { passive: true });
     window.addEventListener('resize', () => {
       if (!this.virtual) return;
@@ -80,8 +107,18 @@ export class TreeView {
     });
   }
 
-  get isVirtual(): boolean {
-    return this.virtual;
+  get selectedNode(): TNode | null {
+    return this.selected;
+  }
+
+  /** Row height in px; follows the font size setting. */
+  setRowHeight(px: number): void {
+    if (px === this.rowHeight) return;
+    this.rowHeight = px;
+    if (!this.el.isConnected) return;
+    const keep = this.selectedIndex();
+    this.refresh();
+    if (keep >= 0) this.scrollToRow(keep, 'center');
   }
 
   /**
@@ -89,18 +126,21 @@ export class TreeView {
    * screen position `keepY` (captured before the model changed).
    */
   refresh(keep?: number, keepY?: number | null): void {
+    this.hidePreview();
     this.virtual = this.model.rows.length > FULL_RENDER_LIMIT;
     this.el.classList.toggle('jvp-virtual', this.virtual);
+    this.el.setAttribute('aria-rowcount', String(this.model.rows.length));
     const re = this.hooks.highlight();
     if (re !== this.globalReFor) {
       this.globalReFor = re;
       this.globalRe = re ? new RegExp(re.source, 'gi') : null;
     }
+    this.selIndex = -1;
 
     if (this.virtual) {
       this.rowEls = [];
       // Size the spacer before any scroll, or the scroll is clamped to the old height.
-      this.body.style.height = `${Math.min(this.model.rows.length * ROW_HEIGHT, MAX_SCROLL_PX)}px`;
+      this.body.style.height = `${Math.min(this.model.rows.length * this.rowHeight, MAX_SCROLL_PX)}px`;
       this.measure();
       if (keep !== undefined && keepY !== undefined && keepY !== null) this.scrollRowTo(keep, keepY);
       this.renderWindow();
@@ -125,32 +165,92 @@ export class TreeView {
   toggleAt(index: number, deep = false): void {
     const node = this.model.rows[index];
     if (!(node instanceof TNode) || !node.expandable) return;
-    const y = this.rowScreenY(index);
-
     if (deep) {
-      if (node.expanded) {
-        this.model.collapseAt(index);
-        const stack: TNode[] = [node];
-        while (stack.length) {
-          const n = stack.pop()!;
-          n.expanded = false;
-          if (n.children) for (const c of n.children) if (c.expanded) stack.push(c);
-        }
-      } else if (!this.model.expandSubtreeAt(index, EXPAND_LIMIT)) {
-        this.hooks.onLimit?.(() => {
-          const at = this.model.indexOfNode(node);
-          if (at < 0) return;
-          this.model.expandSubtreeAt(at);
-          this.refresh();
-        });
-      }
-      this.refresh(index, y);
-    } else {
-      const delta = this.model.toggleAt(index);
-      if (!this.virtual && this.model.rows.length <= FULL_RENDER_LIMIT) this.patch(index, delta);
-      else this.refresh(index, y);
+      if (node.expanded) this.collapseSubtreeAt(index);
+      else this.expandSubtreeAt(index);
+      return;
     }
-    this.hooks.onToggle?.();
+    const y = this.rowScreenY(index);
+    const delta = this.model.toggleAt(index);
+    if (!this.virtual && this.model.rows.length <= FULL_RENDER_LIMIT) this.patch(index, delta);
+    else this.refresh(index, y);
+    this.keepSelectionVisible(index);
+  }
+
+  expandSubtreeAt(index: number): void {
+    const node = this.model.rows[index];
+    if (!(node instanceof TNode) || !node.expandable) return;
+    const y = this.rowScreenY(index);
+    if (!this.model.expandSubtreeAt(index, EXPAND_LIMIT)) {
+      this.hooks.onLimit?.(() => {
+        const at = this.model.indexOfNode(node);
+        if (at < 0) return;
+        this.model.expandSubtreeAt(at);
+        this.refresh();
+      });
+    }
+    this.refresh(index, y);
+  }
+
+  collapseSubtreeAt(index: number): void {
+    const node = this.model.rows[index];
+    if (!(node instanceof TNode) || !node.expandable) return;
+    const y = this.rowScreenY(index);
+    this.model.collapseAt(index);
+    const stack: TNode[] = [node];
+    while (stack.length) {
+      const n = stack.pop()!;
+      n.expanded = false;
+      if (n.children) for (const c of n.children) if (c.expanded) stack.push(c);
+    }
+    this.refresh(index, y);
+    this.keepSelectionVisible(index);
+  }
+
+  // ---------- selection ----------
+
+  /** Row index of the selected node, or -1 when nothing is selected or it is hidden. */
+  selectedIndex(): number {
+    if (!this.selected) return -1;
+    const rows = this.model.rows;
+    if (rows[this.selIndex] !== this.selected) this.selIndex = rows.indexOf(this.selected);
+    return this.selIndex;
+  }
+
+  select(index: number, scroll = true): void {
+    const row = this.model.rows[index];
+    if (!(row instanceof TNode)) return;
+    const prev = this.selected;
+    this.selected = row;
+    this.selIndex = index;
+    if (prev && prev !== row) {
+      const old = document.getElementById(rowId(prev));
+      old?.classList.remove('jvp-row-selected');
+      old?.removeAttribute('aria-selected');
+    }
+    const e = document.getElementById(rowId(row));
+    e?.classList.add('jvp-row-selected');
+    e?.setAttribute('aria-selected', 'true');
+    this.el.setAttribute('aria-activedescendant', rowId(row));
+    if (scroll) this.scrollToRow(index, 'nearest');
+    if (prev !== row) this.hooks.onSelect?.(row);
+  }
+
+  /** Select `node`, opening its ancestors if needed. */
+  selectNode(node: TNode, scroll = true): void {
+    let index = this.model.indexOfNode(node);
+    if (index < 0) {
+      index = this.model.reveal(pathOf(node));
+      if (index < 0) return;
+      this.refresh();
+    }
+    this.select(index, false);
+    if (scroll) this.scrollToRow(index, 'center');
+  }
+
+  /** After collapsing the node at `index`, move a selection it hid onto it. */
+  private keepSelectionVisible(index: number): void {
+    if (this.selected && this.selectedIndex() < 0) this.select(index, false);
   }
 
   /** Scroll so row `index` is visible (`nearest`) or centred. */
@@ -158,19 +258,18 @@ export class TreeView {
     const top = this.hooks.topInset();
     const vh = window.innerHeight;
     const y = this.rowScreenY(index);
-    if (align === 'nearest' && y !== null && y >= top && y + ROW_HEIGHT <= vh) return;
+    const h = this.rowHeight;
+    if (align === 'nearest' && y !== null && y >= top && y + h <= vh) return;
     let target: number;
-    if (align === 'center') target = Math.round((top + vh - ROW_HEIGHT) / 2);
-    else target = y !== null && y < top ? top : vh - ROW_HEIGHT;
+    if (align === 'center') target = Math.round((top + vh - h) / 2);
+    else target = y !== null && y < top ? top : vh - h;
     this.scrollRowTo(index, target);
   }
 
   /** The element currently showing row `index`, if it is rendered. */
   elementForRow(index: number): HTMLElement | null {
-    if (!this.virtual) return this.rowEls[index] ?? null;
     const row = this.model.rows[index];
-    for (const child of Array.from(this.body.children)) if (this.rowOf.get(child) === row) return child as HTMLElement;
-    return null;
+    return row instanceof TNode ? document.getElementById(rowId(row)) : null;
   }
 
   // ---------- layout ----------
@@ -180,6 +279,7 @@ export class TreeView {
   }
 
   private schedule(): void {
+    this.hidePreview();
     if (!this.virtual || this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
@@ -189,35 +289,37 @@ export class TreeView {
 
   /**
    * Scroll geometry for the virtual layout. Row i sits at body offset
-   * `scroll + (i - exact) * ROW_HEIGHT`, where `exact` is the fractional row
+   * `scroll + (i - exact) * rowHeight`, where `exact` is the fractional row
    * at the top of the viewport. `k` compresses scrolling when the list is taller
    * than MAX_SCROLL_PX (k = 1 otherwise).
    */
   private geometry() {
+    const h = this.rowHeight;
     const n = this.model.rows.length;
     const vh = window.innerHeight;
-    const total = n * ROW_HEIGHT;
+    const total = n * h;
     const spacer = Math.min(total, MAX_SCROLL_PX);
     const maxScroll = Math.max(0, spacer - vh);
-    const rowsBelowFold = Math.max(0, n - vh / ROW_HEIGHT);
-    const k = total > MAX_SCROLL_PX && rowsBelowFold > 0 ? maxScroll / (rowsBelowFold * ROW_HEIGHT) : 1;
+    const rowsBelowFold = Math.max(0, n - vh / h);
+    const k = total > MAX_SCROLL_PX && rowsBelowFold > 0 ? maxScroll / (rowsBelowFold * h) : 1;
     const scroll = Math.min(maxScroll, Math.max(0, window.scrollY - this.bodyTop));
-    const exact = scroll / (k * ROW_HEIGHT);
+    const exact = scroll / (k * h);
     return { n, vh, spacer, k, scroll, exact };
   }
 
   private renderWindow(): void {
     if (!this.virtual || !this.el.isConnected || this.el.classList.contains('jvp-hidden')) return;
     const g = this.geometry();
+    const h = this.rowHeight;
     this.body.style.height = `${g.spacer}px`;
     const first = Math.floor(g.exact);
     const from = Math.max(0, first - OVERSCAN);
-    const to = Math.min(g.n, first + Math.ceil(g.vh / ROW_HEIGHT) + 1 + OVERSCAN);
+    const to = Math.min(g.n, first + Math.ceil(g.vh / h) + 1 + OVERSCAN);
     const frag = document.createDocumentFragment();
     const rows = this.model.rows;
     for (let i = from; i < to; i++) {
       const e = this.renderRow(rows[i]!);
-      e.style.top = `${Math.round(g.scroll + (i - g.exact) * ROW_HEIGHT)}px`;
+      e.style.top = `${Math.round(g.scroll + (i - g.exact) * h)}px`;
       frag.appendChild(e);
     }
     this.windowFrom = from;
@@ -230,7 +332,7 @@ export class TreeView {
       return e ? e.getBoundingClientRect().top : null;
     }
     const g = this.geometry();
-    return this.bodyTop - window.scrollY + g.scroll + (index - g.exact) * ROW_HEIGHT;
+    return this.bodyTop - window.scrollY + g.scroll + (index - g.exact) * this.rowHeight;
   }
 
   private scrollRowTo(index: number, screenY: number): void {
@@ -239,9 +341,9 @@ export class TreeView {
       if (e) window.scrollBy(0, e.getBoundingClientRect().top - screenY);
       return;
     }
-    // On screen, row i sits at (i * ROW_HEIGHT - scroll / k); solve for scroll.
+    // On screen, row i sits at (i * rowHeight - scroll / k); solve for scroll.
     const g = this.geometry();
-    window.scrollTo(window.scrollX, this.bodyTop + (index * ROW_HEIGHT - screenY) * g.k);
+    window.scrollTo(window.scrollX, this.bodyTop + (index * this.rowHeight - screenY) * g.k);
     this.renderWindow();
   }
 
@@ -269,6 +371,7 @@ export class TreeView {
     } else if (delta < 0) {
       for (const e of this.rowEls.splice(index + 1, -delta)) e.remove();
     }
+    this.selIndex = -1;
   }
 
   // ---------- rows ----------
@@ -279,6 +382,8 @@ export class TreeView {
 
     if (isCloseRow(row)) {
       e.className = 'jvp-row jvp-close';
+      e.setAttribute('role', 'none');
+      e.setAttribute('aria-hidden', 'true');
       e.style.setProperty('--d', String(row.closeOf.depth));
       e.appendChild(span('jvp-bracket', row.closeOf.kind === 'array' ? ']' : '}'));
       return e;
@@ -286,13 +391,25 @@ export class TreeView {
 
     const node = row;
     const re = this.globalRe;
+    e.id = rowId(node);
     e.className = node.expandable ? 'jvp-row jvp-expandable' : 'jvp-row';
+    e.setAttribute('role', 'treeitem');
+    e.setAttribute('aria-level', String(node.depth + 1));
+    if (node.parent) {
+      e.setAttribute('aria-setsize', String(node.parent.size));
+      e.setAttribute('aria-posinset', String(node.index + 1));
+    }
     e.style.setProperty('--d', String(node.depth));
     if (this.hooks.isCurrent(node)) e.classList.add('jvp-row-current');
+    if (node === this.selected) {
+      e.classList.add('jvp-row-selected');
+      e.setAttribute('aria-selected', 'true');
+    }
 
     // The arrow is CSS generated content, so it never ends up in copied text.
     if (node.expandable) {
       e.appendChild(span('jvp-toggle'));
+      e.setAttribute('aria-expanded', String(node.expanded));
       if (node.expanded) e.classList.add('jvp-open');
     }
 
@@ -332,6 +449,8 @@ export class TreeView {
         if (node.value instanceof LosslessNumber) {
           v.classList.add('jvp-lossless');
           v.title = 'Exact value: more digits than a JavaScript number holds, so it is shown and copied exactly as sent';
+        } else {
+          this.describeTime(v, node);
         }
         e.appendChild(v);
         break;
@@ -343,21 +462,37 @@ export class TreeView {
       }
     }
 
-    const copy = document.createElement('button');
-    copy.type = 'button';
-    copy.className = 'jvp-copy';
-    copy.dataset.act = 'copy';
-    copy.tabIndex = -1;
-    copy.textContent = '⎘';
-    copy.title = node.isContainer ? 'Copy path' : 'Copy value';
-    e.appendChild(copy);
+    const actions = document.createElement('button');
+    actions.type = 'button';
+    actions.className = 'jvp-actions-btn';
+    actions.dataset.act = 'menu';
+    actions.tabIndex = -1;
+    actions.textContent = '⋯';
+    actions.title = 'Copy value or path…';
+    actions.setAttribute('aria-label', 'Actions');
+    actions.setAttribute('aria-haspopup', 'menu');
+    e.appendChild(actions);
     return e;
+  }
+
+  /** A human date tooltip on values that look like timestamps. */
+  private describeTime(v: HTMLElement, node: TNode): void {
+    const ms = timestampMillis(node.parent?.kind === 'object' ? node.key : null, node.value);
+    if (ms === null) return;
+    v.classList.add('jvp-time');
+    v.title = `${formatUtc(ms)}\n${new Date(ms).toLocaleString()} (your time)\n${relativeTime(ms, Date.now())}`;
   }
 
   private appendString(row: HTMLElement, node: TNode, re: RegExp | null): void {
     const s = node.value as string;
     const clipped = s.length > STRING_CLIP && !this.fullStrings.has(node);
     const v = span('jvp-value jvp-string');
+    if (!clipped && isHexColor(s)) {
+      const swatch = span('jvp-swatch');
+      swatch.setAttribute('aria-hidden', 'true');
+      swatch.style.backgroundColor = s;
+      row.appendChild(swatch);
+    }
     if (clipped) {
       this.appendText(v, JSON.stringify(s.slice(0, STRING_CLIP)).slice(0, -1) + '…', re);
     } else if (isUrl(s)) {
@@ -369,12 +504,15 @@ export class TreeView {
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       this.appendText(a, quoted.slice(1, -1), re);
+      if (isImageUrl(s)) a.classList.add('jvp-img-url');
       v.append(a, '"');
     } else {
       this.appendText(v, JSON.stringify(s), re);
+      if (isImageUrl(s)) v.classList.add('jvp-img-url');
+      this.describeTime(v, node);
     }
     // Virtual rows are one line and clip long values; the tooltip shows the rest.
-    if (this.virtual && s.length > 60) v.title = s.length > 2000 ? `${s.slice(0, 2000)}…` : s;
+    if (this.virtual && s.length > 60 && !v.title) v.title = s.length > 2000 ? `${s.slice(0, 2000)}…` : s;
     row.appendChild(v);
     if (clipped) {
       const more = document.createElement('button');
@@ -421,31 +559,27 @@ export class TreeView {
 
   private onClick(e: MouseEvent): void {
     const target = e.target as Element;
-    if (target.closest('a')) return;
     const rowEl = target.closest('.jvp-row');
     if (!rowEl) return;
     const row = this.rowOf.get(rowEl);
     if (!row || isCloseRow(row)) return;
+    const index = this.indexOfElement(rowEl);
+    if (index < 0) return;
 
+    if (target.closest('a')) {
+      this.select(index, false);
+      return;
+    }
     const act = (target.closest('[data-act]') as HTMLElement | null)?.dataset.act;
-    if (act === 'copy') {
+    if (act === 'menu') {
       e.stopPropagation();
-      const text = row.isContainer
-        ? formatPath(pathOf(row))
-        : typeof row.value === 'string'
-          ? row.value
-          : primitiveText(row.value);
-      const btn = target.closest('button')!;
-      void copyText(text).then((ok) => {
-        btn.textContent = ok ? '✓' : '✕';
-        setTimeout(() => (btn.textContent = '⎘'), 1200);
-      });
+      this.select(index, false);
+      this.hooks.onMenu?.(row, target.closest('button')!);
       return;
     }
     if (act === 'more') {
       this.fullStrings.add(row);
-      const index = this.indexOfElement(rowEl);
-      if (index >= 0 && !this.virtual) {
+      if (!this.virtual) {
         const fresh = this.renderRow(row);
         rowEl.replaceWith(fresh);
         this.rowEls[index] = fresh;
@@ -455,10 +589,131 @@ export class TreeView {
       return;
     }
 
-    if (!row.expandable) return;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && sel.anchorNode && rowEl.contains(sel.anchorNode)) return;
-    const index = this.indexOfElement(rowEl);
-    if (index >= 0) this.toggleAt(index, e.altKey);
+    this.select(index, false);
+    this.el.focus({ preventScroll: true });
+    // The label (arrow, key, bracket, count) toggles; the rest of the row only selects.
+    if (row.expandable && target.closest('.jvp-toggle, .jvp-key, .jvp-index, .jvp-colon, .jvp-bracket, .jvp-count')) {
+      this.toggleAt(index, e.altKey);
+    }
+  }
+
+  private onKeyDown(e: KeyboardEvent): void {
+    if (e.target !== this.el) return;
+    const action = resolveTreeKey(e);
+    if (!action) return;
+    this.el.classList.add('jvp-kbd');
+    const rows = this.model.rows;
+    const index = this.selectedIndex();
+    if (index < 0) {
+      if (action === 'copy-value' || action === 'copy-path') return;
+      e.preventDefault();
+      if (rows.length) this.select(0);
+      return;
+    }
+    const node = rows[index] as TNode;
+    const page = Math.max(1, Math.floor((window.innerHeight - this.hooks.topInset()) / this.rowHeight) - 1);
+    const nodeRowNear = (i: number, dir: 1 | -1) => {
+      if (rows[i] instanceof TNode) return i;
+      const t = this.model.stepRow(i, dir);
+      return t >= 0 ? t : this.model.stepRow(i, dir === 1 ? -1 : 1);
+    };
+    let target = -1;
+    switch (action) {
+      case 'down':
+        target = this.model.stepRow(index, 1);
+        break;
+      case 'up':
+        target = this.model.stepRow(index, -1);
+        break;
+      case 'right':
+        if (node.expandable && !node.expanded) this.toggleAt(index);
+        else if (node.expandable) target = this.model.stepRow(index, 1);
+        break;
+      case 'left':
+        if (node.expandable && node.expanded) this.toggleAt(index);
+        else target = this.model.parentRow(index);
+        break;
+      case 'home':
+        target = 0;
+        break;
+      case 'end':
+        target = this.model.lastNodeRow();
+        break;
+      case 'page-down':
+        target = nodeRowNear(Math.min(rows.length - 1, index + page), -1);
+        break;
+      case 'page-up':
+        target = nodeRowNear(Math.max(0, index - page), 1);
+        break;
+      case 'toggle':
+        if (node.expandable) this.toggleAt(index);
+        break;
+      case 'expand-subtree':
+        if (node.expandable) this.expandSubtreeAt(index);
+        break;
+      case 'copy-value':
+      case 'copy-path': {
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed) return; // copying selected text is the browser's job
+        this.hooks.onCopy?.(node, action === 'copy-value' ? 'value' : 'path');
+        break;
+      }
+      case 'menu':
+        this.scrollToRow(index);
+        this.hooks.onMenu?.(node, this.elementForRow(index) ?? this.el);
+        break;
+    }
+    e.preventDefault();
+    if (target >= 0) this.select(target);
+  }
+
+  // ---------- image preview ----------
+
+  private onHover(e: MouseEvent): void {
+    const hit = (e.target as Element).closest?.('.jvp-img-url') as HTMLElement | null;
+    if (!hit || !this.hooks.imagePreview?.()) return;
+    const rowEl = hit.closest('.jvp-row');
+    const node = rowEl ? this.rowOf.get(rowEl) : undefined;
+    if (!(node instanceof TNode) || typeof node.value !== 'string') return;
+    this.showPreview(node.value, hit);
+  }
+
+  private showPreview(src: string, anchor: HTMLElement): void {
+    if (!this.preview) {
+      const box = document.createElement('div');
+      box.className = 'jvp-preview';
+      box.setAttribute('role', 'tooltip');
+      const img = document.createElement('img');
+      img.alt = '';
+      img.decoding = 'async';
+      img.referrerPolicy = 'no-referrer';
+      const caption = span('jvp-preview-caption');
+      img.addEventListener('load', () => {
+        caption.textContent = `${formatNumber(img.naturalWidth)} × ${formatNumber(img.naturalHeight)}`;
+      });
+      img.addEventListener('error', () => {
+        caption.textContent = 'Could not load this image (the site or this page’s security policy may block it)';
+      });
+      box.append(img, caption);
+      this.preview = box;
+      document.body.appendChild(box);
+    }
+    const box = this.preview;
+    const img = box.querySelector('img')!;
+    if (img.getAttribute('src') !== src) {
+      (box.querySelector('.jvp-preview-caption') as HTMLElement).textContent = 'Loading…';
+      img.src = src;
+    }
+    const r = anchor.getBoundingClientRect();
+    const top = r.bottom + 240 < window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - 246);
+    box.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - 248)))}px`;
+    box.style.top = `${Math.round(top)}px`;
+    box.hidden = false;
+  }
+
+  private hidePreview(): void {
+    if (this.preview) this.preview.hidden = true;
   }
 }

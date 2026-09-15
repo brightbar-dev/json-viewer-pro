@@ -33,6 +33,28 @@ export function splitChunks(text: string, size = 50_000): string[] {
   return out;
 }
 
+export interface ChunkLines {
+  /** 1-based number of the first line that starts in or continues into this chunk. */
+  firstLine: number;
+  /** True when the chunk begins partway through a line (the previous chunk did not end with a line break). */
+  continues: boolean;
+}
+
+/** Line numbering for each chunk from splitChunks. */
+export function chunkLines(chunks: readonly string[]): ChunkLines[] {
+  const out: ChunkLines[] = [];
+  let line = 1;
+  let continues = false;
+  for (const chunk of chunks) {
+    out.push({ firstLine: line, continues });
+    let n = 0;
+    for (let i = chunk.indexOf('\n'); i !== -1; i = chunk.indexOf('\n', i + 1)) n++;
+    line += n;
+    continues = chunk.length > 0 && !chunk.endsWith('\n');
+  }
+  return out;
+}
+
 /** Rough number of wrapped lines `text` occupies at `columns` characters per line. */
 export function estimateLines(text: string, columns: number): number {
   const cols = Math.max(1, columns);

@@ -1,31 +1,45 @@
 /**
- * The viewer UI: toolbar, tree, raw view and search for a parsed document, and
- * deliberate error and empty states for everything else.
+ * The viewer UI: a sticky header (toolbar, path bar, notices), the tree, the
+ * raw view and search for a parsed document, and deliberate error and empty
+ * states for everything else. Settings apply live through the controller that
+ * `mountViewer` returns.
  */
 import css from './viewer.css?inline';
 import { analyze, type EmptyDoc, type ErrorDoc, type JsonDoc, type ViewerDoc } from './document';
 import { addStyleSheet, copyText, el, flashLabel } from './dom';
-import { formatMatchCount, formatNumber, formatSize, utf8Length } from './format';
+import { downloadName, formatMatchCount, formatNumber, formatSize, utf8Length } from './format';
+import { openMenu, type MenuEntry } from './menu';
 import { errorExcerpt } from './parser';
-import { estimateLines, splitChunks } from './raw';
+import { RawView } from './rawview';
 import { compileQuery, emptyResult, filterIncludes, pathOfMatch, searchSteps, type SearchResult } from './search';
 import { stringifyJson } from './serialize';
-import type { Theme } from './settings';
+import { fontStack, rowHeightFor, type Settings, type Theme } from './settings';
 import { resolveShortcut } from './shortcuts';
-import { expandByBudget, isContainerValue, TreeModel, type TNode } from './tree';
+import { expandByBudget, formatJsonPointer, formatJsPath, formatPath, isContainerValue, pathOf, TreeModel, type TNode } from './tree';
 import { EXPAND_LIMIT, TreeView } from './view';
 
-/** Rows opened on first render (breadth first). */
-export const INITIAL_ROW_BUDGET = 1500;
 /** Longest a search may hold the main thread before yielding a frame. */
 const SEARCH_SLICE_MS = 12;
 
 export interface MountOptions {
-  theme: Theme;
+  settings: Settings;
   /** The response's declared content type, for the error and empty states. */
   contentType?: string;
   /** Exact body size in bytes, when the caller knows it. */
   byteSize?: number;
+  /** The document's URL, for download file names. */
+  url?: string;
+}
+
+export interface ViewerController {
+  /** Apply changed settings to the open viewer, without a reload. */
+  applySettings(settings: Settings): void;
+}
+
+interface Context {
+  opts: MountOptions;
+  settings(): Settings;
+  onSettings(listener: (settings: Settings) => void): void;
 }
 
 function button(label: string, title?: string): HTMLButtonElement {
@@ -35,72 +49,78 @@ function button(label: string, title?: string): HTMLButtonElement {
   return b;
 }
 
-function applyTheme(body: HTMLElement, theme: Theme): void {
-  const media = window.matchMedia('(prefers-color-scheme: dark)');
-  const apply = () => {
-    const dark = theme === 'dark' || (theme === 'auto' && media.matches);
-    body.classList.toggle('jvp-dark', dark);
-    body.classList.toggle('jvp-light', !dark);
-  };
-  apply();
-  if (theme === 'auto') media.addEventListener('change', apply);
-}
-
-/** Replace the page with the viewer for `doc`. */
-export function mountViewer(doc: ViewerDoc, opts: MountOptions): void {
-  addStyleSheet(css);
-  const body = document.body ?? document.documentElement.appendChild(document.createElement('body'));
-  applyTheme(body, opts.theme);
-  const root = el('div', 'jvp-root');
-  body.replaceChildren(root);
-  if (doc.kind === 'json') mountJson(root, doc, opts);
-  else if (doc.kind === 'error') mountError(root, doc, opts);
-  else mountEmpty(root, doc, opts);
-}
-
-function sizeLabel(doc: ViewerDoc, opts: MountOptions): string {
-  return formatSize(opts.byteSize ?? utf8Length(doc.raw));
-}
-
 function badge(text: string, title: string): HTMLElement {
   const b = el('span', 'jvp-badge', text);
   b.title = title;
   return b;
 }
 
-/**
- * The untouched body, in chunks the browser lays out only while they are on
- * screen. `mark` highlights a character range (the error line).
- */
-function renderRaw(raw: string, mark?: { start: number; end: number }): HTMLElement {
-  const box = el('div', 'jvp-raw');
-  box.id = 'jvp-raw';
-  // Monospace 13px is ~7.8px per character; the estimate only sizes the
-  // scrollbar until a chunk has been laid out once (`auto` then remembers).
-  const columns = Math.max(20, Math.floor((window.innerWidth - 32) / 7.8));
-  let offset = 0;
-  for (const chunk of splitChunks(raw)) {
-    const pre = el('pre', 'jvp-raw-chunk');
-    const end = offset + chunk.length;
-    if (mark && mark.start < end && mark.end > offset) {
-      const a = Math.max(mark.start, offset) - offset;
-      const b = Math.min(mark.end, end) - offset;
-      pre.append(chunk.slice(0, a), el('mark', 'jvp-raw-error', chunk.slice(a, b)), chunk.slice(b));
-    } else {
-      pre.textContent = chunk;
-    }
-    pre.style.setProperty('contain-intrinsic-size', `auto ${estimateLines(chunk, columns) * 20}px`);
-    box.append(pre);
-    offset = end;
-  }
-  return box;
+/** Theme (following the system live when `auto`), font, size and indent, as CSS state on <body>. */
+function createAppearance(body: HTMLElement): (settings: Settings) => void {
+  let theme: Theme = 'auto';
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  const applyTheme = () => {
+    const dark = theme === 'dark' || (theme === 'auto' && media.matches);
+    body.classList.toggle('jvp-dark', dark);
+    body.classList.toggle('jvp-light', !dark);
+  };
+  media.addEventListener('change', applyTheme);
+  return (s) => {
+    theme = s.theme;
+    applyTheme();
+    body.style.setProperty('--jvp-font', fontStack(s.fontFamily));
+    body.style.setProperty('--jvp-font-size', `${s.fontSize}px`);
+    body.style.setProperty('--jvp-row-h', `${rowHeightFor(s.fontSize)}px`);
+    body.style.setProperty('--jvp-indent', `${s.indent}px`);
+  };
 }
 
-function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
+/** Replace the page with the viewer for `doc`. */
+export function mountViewer(doc: ViewerDoc, opts: MountOptions): ViewerController {
+  addStyleSheet(css);
+  const body = document.body ?? document.documentElement.appendChild(document.createElement('body'));
+  const appearance = createAppearance(body);
+  let settings = opts.settings;
+  appearance(settings);
+  const listeners: ((s: Settings) => void)[] = [];
+  const ctx: Context = { opts, settings: () => settings, onSettings: (l) => listeners.push(l) };
+  const root = el('div', 'jvp-root');
+  body.replaceChildren(root);
+  if (doc.kind === 'json') mountJson(root, doc, ctx);
+  else if (doc.kind === 'error') mountError(root, doc, ctx);
+  else mountEmpty(root, doc, ctx);
+  return {
+    applySettings(next) {
+      settings = next;
+      appearance(next);
+      for (const l of listeners) l(next);
+    },
+  };
+}
+
+function sizeLabel(doc: ViewerDoc, opts: MountOptions): string {
+  return formatSize(opts.byteSize ?? utf8Length(doc.raw));
+}
+
+function download(text: string, name: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = el('a');
+  a.href = url;
+  a.download = name;
+  a.hidden = true;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
+  const { opts } = ctx;
   const model = new TreeModel(doc.value);
-  expandByBudget(model.root, INITIAL_ROW_BUDGET);
+  expandByBudget(model.root, ctx.settings().expandBudget);
   model.rebuild();
   const lossless = doc.preserved > 0;
+  const url = opts.url ?? '';
 
   // ----- search state -----
   let re: RegExp | null = null;
@@ -118,8 +138,11 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     return node.parent !== null && node.parent.value === container && node.key === result.keys[current];
   };
 
-  // ----- toolbar -----
+  // ----- header: toolbar -----
+  const header = el('header', 'jvp-header');
   const toolbar = el('div', 'jvp-toolbar');
+
+  const searchGroup = el('div', 'jvp-search-group jvp-tree-only');
   const input = el('input', 'jvp-search');
   input.type = 'search';
   input.id = 'jvp-search';
@@ -136,14 +159,51 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
   const count = el('span', 'jvp-match-count');
   count.setAttribute('role', 'status');
   count.setAttribute('aria-live', 'polite');
+  searchGroup.append(input, prevBtn, nextBtn, count);
+
   const filterBtn = button('Filter', 'Show only the rows that match the search');
+  filterBtn.classList.add('jvp-tree-only');
   filterBtn.setAttribute('aria-pressed', 'false');
-  const rawBtn = button('Raw', 'Show the response exactly as it was received');
-  rawBtn.setAttribute('aria-pressed', 'false');
+  const rawBtn = button('Raw', 'Switch between the tree and the response exactly as received');
+
+  const copyGroup = el('div', 'jvp-group');
   const copyBtn = button('Copy', 'Copy the formatted JSON (in Raw view, the raw body)');
+  const copyMenuBtn = button('▾', 'More copy and download options');
+  copyMenuBtn.classList.add('jvp-btn-icon');
+  copyMenuBtn.setAttribute('aria-label', 'More copy and download options');
+  copyMenuBtn.setAttribute('aria-haspopup', 'menu');
+  copyMenuBtn.setAttribute('aria-expanded', 'false');
+  copyGroup.append(copyBtn, copyMenuBtn);
+
+  const levels = el('div', 'jvp-group jvp-tree-only');
+  levels.setAttribute('role', 'group');
+  levels.setAttribute('aria-label', 'Expand and collapse');
+  const collapseBtn = button('Collapse all', 'Collapse everything below the top level (c)');
+  const levelBtns = [1, 2, 3].map((n) => {
+    const b = button(String(n), `Show ${n} level${n === 1 ? '' : 's'} (${n})`);
+    b.setAttribute('aria-label', `Show ${n} level${n === 1 ? '' : 's'}`);
+    b.classList.add('jvp-btn-level');
+    return b;
+  });
   const expandBtn = button('Expand all', 'Expand every node (e)');
-  const collapseBtn = button('Collapse all', 'Collapse every node (c)');
+  levels.append(collapseBtn, ...levelBtns, expandBtn);
+
+  const sortBtn = button('Sort keys', 'Show object keys in alphabetical order. View only: copies keep the original order.');
+  sortBtn.classList.add('jvp-tree-only');
+  sortBtn.setAttribute('aria-pressed', 'false');
+
+  const wrapBtn = button('Wrap', 'Wrap long lines');
+  wrapBtn.classList.add('jvp-raw-only');
+  wrapBtn.setAttribute('aria-pressed', 'true');
+  const linesBtn = button('Line numbers', 'Show line numbers');
+  linesBtn.classList.add('jvp-raw-only');
+  linesBtn.setAttribute('aria-pressed', 'true');
+
   const info = el('span', 'jvp-info');
+  const status = el('span', 'jvp-status');
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  info.append(status);
   if (doc.format === 'ndjson') {
     const n = (doc.value as unknown[]).length;
     info.append(badge(`NDJSON · ${formatNumber(n)} line${n === 1 ? '' : 's'}`, 'Newline-delimited JSON, shown as an array of its lines'));
@@ -160,12 +220,24 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     );
   }
   info.append(el('span', 'jvp-size', sizeLabel(doc, opts)));
-  toolbar.append(input, prevBtn, nextBtn, count, filterBtn, rawBtn, copyBtn, expandBtn, collapseBtn, info);
+  toolbar.append(searchGroup, filterBtn, rawBtn, copyGroup, levels, sortBtn, wrapBtn, linesBtn, info);
 
+  // ----- header: path bar -----
+  const pathbar = el('div', 'jvp-pathbar jvp-tree-only');
+  const crumbs = el('nav', 'jvp-crumbs');
+  crumbs.setAttribute('aria-label', 'Path of the selected value');
+  const copyPathBtn = button('Copy path', 'Copy the JSONPath of the selected value (Ctrl/Cmd+Shift+C in the tree)');
+  copyPathBtn.classList.add('jvp-btn-small');
+  const pathMenuBtn = button('⋯', 'More ways to copy the selected value');
+  pathMenuBtn.classList.add('jvp-btn-small', 'jvp-btn-icon');
+  pathMenuBtn.setAttribute('aria-label', 'More ways to copy the selected value');
+  pathMenuBtn.setAttribute('aria-haspopup', 'menu');
+  pathbar.append(crumbs, copyPathBtn, pathMenuBtn);
+
+  // ----- header: notices -----
   // Whatever the viewer holds back to stay responsive is announced here, with a way past it.
   const notice = el('div', 'jvp-notice jvp-hidden');
   notice.setAttribute('role', 'status');
-  toolbar.append(notice);
   const hideNotice = () => notice.classList.add('jvp-hidden');
   const showNotice = (text: string, actionLabel: string, action: () => void) => {
     const go = button(actionLabel);
@@ -173,7 +245,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
       hideNotice();
       action();
     });
-    const dismiss = button('\u00d7', 'Dismiss');
+    const dismiss = button('×', 'Dismiss');
     dismiss.classList.add('jvp-btn-icon');
     dismiss.setAttribute('aria-label', 'Dismiss');
     dismiss.addEventListener('click', hideNotice);
@@ -181,18 +253,96 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     notice.classList.remove('jvp-hidden');
   };
   const limitText = `Stopped expanding at ${formatNumber(EXPAND_LIMIT)} nodes to keep the page responsive.`;
+  header.append(toolbar, pathbar, notice);
+
+  // ----- copying -----
+  let statusTimer: ReturnType<typeof setTimeout> | undefined;
+  const announce = (text: string) => {
+    status.textContent = text;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => (status.textContent = ''), 3000);
+  };
+  const copy = (text: string, what: string) => {
+    void copyText(text).then((ok) => announce(ok ? `Copied ${what} · ${formatSize(utf8Length(text))}` : 'Copy failed'));
+  };
+  const copyValue = (node: TNode) => copy(stringifyJson(node.value, 2, lossless), 'value');
+  const copyPath = (node: TNode) => copy(formatPath(pathOf(node)), 'JSONPath');
 
   const main = el('main', 'jvp-main');
-  const view = new TreeView(model, {
+  let view: TreeView;
+
+  const rowMenu = (node: TNode, anchor: HTMLElement) => {
+    const path = pathOf(node);
+    const short = (s: string) => (s.length > 42 ? `${s.slice(0, 41)}…` : s);
+    const at = () => model.indexOfNode(node);
+    const entries: MenuEntry[] = [
+      { label: 'Copy value', hint: node.isContainer ? 'formatted JSON' : 'as JSON', action: () => copyValue(node) },
+      node.kind === 'string' ? { label: 'Copy text', hint: 'without quotes', action: () => copy(node.value as string, 'text') } : null,
+      node.isContainer ? { label: 'Copy minified', hint: 'one line', action: () => copy(stringifyJson(node.value, 0, lossless), 'minified value') } : null,
+      'separator',
+      { label: 'Copy JSONPath', hint: short(formatPath(path)), action: () => copyPath(node) },
+      { label: 'Copy JS path', hint: path.length ? short(formatJsPath(path)) : 'n/a for the root', disabled: !path.length, action: () => copy(formatJsPath(path), 'JS path') },
+      { label: 'Copy JSON Pointer', hint: path.length ? short(formatJsonPointer(path)) : 'n/a for the root', disabled: !path.length, action: () => copy(formatJsonPointer(path), 'JSON Pointer') },
+      node.expandable ? 'separator' : null,
+      node.expandable ? { label: 'Expand all below', hint: '*', action: () => at() >= 0 && view.expandSubtreeAt(at()) } : null,
+      node.expandable ? { label: 'Collapse all below', hint: 'Alt+click', action: () => at() >= 0 && view.collapseSubtreeAt(at()) } : null,
+    ];
+    openMenu(anchor, entries, { host: root, returnFocus: anchor.closest('.jvp-row') ? view.el : anchor });
+  };
+
+  const updatePath = (node: TNode | null) => {
+    copyPathBtn.disabled = !node;
+    pathMenuBtn.disabled = !node;
+    if (!node) {
+      crumbs.replaceChildren(el('span', 'jvp-muted', 'Select a row to see its path — in the tree, arrow keys move and Enter opens'));
+      return;
+    }
+    const chain: TNode[] = [];
+    for (let n: TNode | null = node; n; n = n.parent) chain.unshift(n);
+    const list = el('ol', 'jvp-crumb-list');
+    chain.forEach((n, i) => {
+      const label = n.parent === null ? '$' : typeof n.key === 'number' ? `[${n.key}]` : String(n.key);
+      const b = el('button', 'jvp-crumb', label);
+      b.type = 'button';
+      b.title = formatPath(pathOf(n));
+      if (i === chain.length - 1) b.setAttribute('aria-current', 'location');
+      b.addEventListener('click', () => {
+        view.selectNode(n);
+        view.el.focus({ preventScroll: true });
+      });
+      const li = el('li');
+      li.append(b);
+      list.append(li);
+    });
+    crumbs.replaceChildren(list);
+    crumbs.scrollLeft = crumbs.scrollWidth;
+  };
+
+  view = new TreeView(model, {
     highlight: () => re,
     isCurrent,
-    topInset: () => toolbar.offsetHeight,
+    topInset: () => header.offsetHeight,
     onLimit: (expandFully) => showNotice(limitText, 'Expand everything', expandFully),
+    onSelect: updatePath,
+    onMenu: rowMenu,
+    onCopy: (node, what) => (what === 'value' ? copyValue(node) : copyPath(node)),
+    imagePreview: () => ctx.settings().imagePreview,
   });
+  view.setRowHeight(rowHeightFor(ctx.settings().fontSize));
   main.append(view.el);
-  let rawEl: HTMLElement | null = null;
-  root.append(toolbar, main);
+  let raw: RawView | null = null;
+  root.classList.add('jvp-mode-tree');
+  root.append(header, main);
+  updatePath(null);
   view.refresh();
+
+  copyPathBtn.addEventListener('click', () => view.selectedNode && copyPath(view.selectedNode));
+  pathMenuBtn.addEventListener('click', () => view.selectedNode && rowMenu(view.selectedNode, pathMenuBtn));
+
+  ctx.onSettings((s) => {
+    view.setRowHeight(rowHeightFor(s.fontSize));
+    raw?.setMetrics(s.fontSize, rowHeightFor(s.fontSize));
+  });
 
   // ----- search -----
   const updateCount = () => {
@@ -208,7 +358,10 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     current = ((i % n) + n) % n;
     const index = model.reveal(pathOfMatch(result, current));
     view.refresh();
-    if (index >= 0) view.scrollToRow(index, 'center');
+    if (index >= 0) {
+      view.select(index, false);
+      view.scrollToRow(index, 'center');
+    }
     updateCount();
   };
 
@@ -244,7 +397,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     }
     const rx = re;
     const res = (result = emptyResult());
-    const steps = searchSteps(doc.value, rx, res);
+    const steps = searchSteps(doc.value, rx, res, 4000, model.sortKeys);
     const pump = () => {
       if (my !== job) return;
       const t0 = performance.now();
@@ -287,6 +440,9 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     if (e.key === 'Enter') {
       e.preventDefault();
       step(e.shiftKey ? -1 : 1);
+    } else if (e.key === 'ArrowDown' && !input.value) {
+      e.preventDefault();
+      view.el.focus();
     }
   });
   prevBtn.addEventListener('click', () => step(-1));
@@ -301,43 +457,83 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
   });
 
   // ----- views and actions -----
-  const showingRaw = () => !!rawEl && !rawEl.classList.contains('jvp-hidden');
+  const showingRaw = () => root.classList.contains('jvp-mode-raw');
 
   rawBtn.addEventListener('click', () => {
     const toRaw = !showingRaw();
-    if (toRaw && !rawEl) {
-      rawEl = renderRaw(doc.raw);
-      main.append(rawEl);
+    if (toRaw && !raw) {
+      raw = new RawView(doc.raw);
+      raw.el.id = 'jvp-raw';
+      raw.setMetrics(ctx.settings().fontSize, rowHeightFor(ctx.settings().fontSize));
+      main.append(raw.el);
     }
-    rawEl?.classList.toggle('jvp-hidden', !toRaw);
+    root.classList.toggle('jvp-mode-raw', toRaw);
+    root.classList.toggle('jvp-mode-tree', !toRaw);
+    raw?.el.classList.toggle('jvp-hidden', !toRaw);
     view.el.classList.toggle('jvp-hidden', toRaw);
     rawBtn.textContent = toRaw ? 'Tree' : 'Raw';
-    rawBtn.setAttribute('aria-pressed', String(toRaw));
     if (!toRaw) view.refresh();
+  });
+  wrapBtn.addEventListener('click', () => {
+    if (!raw) return;
+    raw.setWrap(!raw.wrapping);
+    wrapBtn.setAttribute('aria-pressed', String(raw.wrapping));
+  });
+  linesBtn.addEventListener('click', () => {
+    if (!raw) return;
+    raw.setLineNumbers(!raw.numbered);
+    linesBtn.setAttribute('aria-pressed', String(raw.numbered));
   });
 
   copyBtn.addEventListener('click', () => {
     flashLabel(copyBtn, copyText(showingRaw() ? doc.raw : stringifyJson(doc.value, 2, lossless)), 'Copied!');
   });
+  const rawExt = doc.jsonp ? 'js' : doc.format === 'ndjson' ? 'ndjson' : 'json';
+  const rawType = doc.jsonp ? 'text/javascript' : doc.format === 'ndjson' ? 'application/x-ndjson' : 'application/json';
+  copyMenuBtn.addEventListener('click', () =>
+    openMenu(
+      copyMenuBtn,
+      [
+        { label: 'Copy formatted JSON', action: () => copy(stringifyJson(doc.value, 2, lossless), 'formatted JSON') },
+        { label: 'Copy minified JSON', action: () => copy(stringifyJson(doc.value, 0, lossless), 'minified JSON') },
+        { label: 'Copy raw response', hint: 'exactly as received', action: () => copy(doc.raw, 'raw response') },
+        'separator',
+        { label: 'Download formatted JSON', hint: downloadName(url), action: () => download(stringifyJson(doc.value, 2, lossless), downloadName(url), 'application/json') },
+        { label: 'Download raw response', hint: downloadName(url, rawExt), action: () => download(doc.raw, downloadName(url, rawExt), rawType) },
+      ],
+      { host: root },
+    ),
+  );
 
-  const expandAll = () => {
-    const complete = model.expandAll(EXPAND_LIMIT);
+  const afterBulk = (complete: boolean, retryLabel: string, retry: () => void) => {
     view.refresh();
-    if (complete) {
-      hideNotice();
-    } else {
-      showNotice(limitText, 'Expand everything', () => {
-        model.expandAll();
-        view.refresh();
-      });
-    }
+    if (complete) hideNotice();
+    else showNotice(limitText, retryLabel, () => {
+      retry();
+      view.refresh();
+    });
   };
+  const expandAll = () => afterBulk(model.expandAll(EXPAND_LIMIT), 'Expand everything', () => model.expandAll());
   const collapseAll = () => {
     model.collapseAll();
     view.refresh();
+    hideNotice();
   };
+  const showLevel = (n: number) => afterBulk(model.expandToLevel(n, EXPAND_LIMIT), `Show all ${n} levels`, () => model.expandToLevel(n));
   expandBtn.addEventListener('click', expandAll);
   collapseBtn.addEventListener('click', collapseAll);
+  levelBtns.forEach((b, i) => b.addEventListener('click', () => showLevel(i + 1)));
+
+  sortBtn.addEventListener('click', () => {
+    const on = !model.sortKeys;
+    model.setSortKeys(on);
+    sortBtn.setAttribute('aria-pressed', String(on));
+    view.refresh();
+    if (re) {
+      searchedFor = ' '; // matches now come in a different order: search again
+      runSearch();
+    }
+  });
 
   // Keyboard shortcuts: plain in-page listeners, so no `commands` permission.
   document.addEventListener('keydown', (e) => {
@@ -345,6 +541,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     const inInput = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
     const action = resolveShortcut(e, inInput);
     if (!action) return;
+    if (showingRaw() && action !== 'clear-search') return;
     if (action === 'focus-search') {
       e.preventDefault();
       input.focus();
@@ -364,11 +561,15 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     } else if (action === 'collapse-all') {
       e.preventDefault();
       collapseAll();
+    } else {
+      e.preventDefault();
+      showLevel(Number(action.slice(-1)));
     }
   });
 }
 
-function stateToolbar(title: string, doc: ViewerDoc, opts: MountOptions): HTMLElement {
+function stateHeader(title: string, doc: ViewerDoc, opts: MountOptions): HTMLElement {
+  const header = el('header', 'jvp-header');
   const toolbar = el('div', 'jvp-toolbar');
   toolbar.append(el('span', 'jvp-title', title));
   if (doc.raw) {
@@ -379,10 +580,12 @@ function stateToolbar(title: string, doc: ViewerDoc, opts: MountOptions): HTMLEl
   const info = el('span', 'jvp-info');
   info.append(el('span', 'jvp-size', sizeLabel(doc, opts)));
   toolbar.append(info);
-  return toolbar;
+  header.append(toolbar);
+  return header;
 }
 
-function mountError(root: HTMLElement, doc: ErrorDoc, opts: MountOptions): void {
+function mountError(root: HTMLElement, doc: ErrorDoc, ctx: Context): void {
+  const { opts } = ctx;
   const what = doc.format === 'ndjson' ? 'NDJSON' : 'JSON';
   const panel = el('section', 'jvp-state jvp-error');
   panel.setAttribute('role', 'alert');
@@ -421,10 +624,10 @@ function mountError(root: HTMLElement, doc: ErrorDoc, opts: MountOptions): void 
       if (retry?.kind === 'json') {
         root.replaceChildren();
         window.scrollTo(0, 0);
-        mountJson(root, retry, opts);
+        mountJson(root, retry, ctx);
       } else if (retry?.kind === 'error') {
         lenient.disabled = true;
-        outcome.textContent = `A lenient parse fails too: ${retry.error.message} \u2014 line ${formatNumber(retry.error.line)}, column ${formatNumber(retry.error.column)}.`;
+        outcome.textContent = `A lenient parse fails too: ${retry.error.message} — line ${formatNumber(retry.error.line)}, column ${formatNumber(retry.error.column)}.`;
       }
     });
     actions.append(lenient, outcome);
@@ -440,12 +643,16 @@ function mountError(root: HTMLElement, doc: ErrorDoc, opts: MountOptions): void 
     lineStart = Math.max(lineStart, at - 40);
     lineEnd = Math.min(lineEnd, at + 40);
   }
+  const rawView = new RawView(doc.raw, { mark: { start: lineStart, end: Math.max(lineEnd, lineStart + 1) } });
+  rawView.setMetrics(ctx.settings().fontSize, rowHeightFor(ctx.settings().fontSize));
+  ctx.onSettings((s) => rawView.setMetrics(s.fontSize, rowHeightFor(s.fontSize)));
   const body = el('section', 'jvp-state jvp-raw-section');
-  body.append(el('h2', 'jvp-raw-heading', 'Response body'), renderRaw(doc.raw, { start: lineStart, end: Math.max(lineEnd, lineStart + 1) }));
-  root.append(stateToolbar(`Invalid ${what}`, doc, opts), panel, body);
+  body.append(el('h2', 'jvp-raw-heading', 'Response body'), rawView.el);
+  root.append(stateHeader(`Invalid ${what}`, doc, opts), panel, body);
 }
 
-function mountEmpty(root: HTMLElement, doc: EmptyDoc, opts: MountOptions): void {
+function mountEmpty(root: HTMLElement, doc: EmptyDoc, ctx: Context): void {
+  const { opts } = ctx;
   const panel = el('section', 'jvp-state jvp-empty');
   panel.append(el('h1', '', 'Empty response'));
   panel.append(
@@ -457,5 +664,5 @@ function mountEmpty(root: HTMLElement, doc: EmptyDoc, opts: MountOptions): void 
         : 'There is no content to show.',
     ),
   );
-  root.append(stateToolbar('Empty response', doc, opts), panel);
+  root.append(stateHeader('Empty response', doc, opts), panel);
 }

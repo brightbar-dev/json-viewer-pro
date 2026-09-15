@@ -114,3 +114,12 @@ describe('filterIncludes', () => {
     expect(keysOf(m.rows)).toEqual(['root', 'user', 'name', 'email', '/user', 'tags', '1', '/tags', '/root']);
   });
 });
+
+describe('search order follows sort keys', () => {
+  it('matches come in sorted order when keys are sorted', () => {
+    const d = { zulu: 'x', alpha: 'x', mike: 'x' };
+    const re = compileQuery('x')!;
+    expect(searchAll(d, re).keys).toEqual(['zulu', 'alpha', 'mike']);
+    expect(searchAll(d, re, true).keys).toEqual(['alpha', 'mike', 'zulu']);
+  });
+});

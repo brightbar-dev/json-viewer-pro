@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { estimateLines, splitChunks } from '../lib/raw';
+import { chunkLines, estimateLines, splitChunks } from '../lib/raw';
 
 describe('splitChunks', () => {
   it('leaves short text whole', () => expect(splitChunks('{"a":1}', 100)).toEqual(['{"a":1}']));
@@ -46,4 +46,22 @@ describe('estimateLines', () => {
   it('empty text is one line', () => expect(estimateLines('', 10)).toBe(1));
   it('a trailing line break adds no line', () => expect(estimateLines('a\n', 10)).toBe(1));
   it('blank lines count', () => expect(estimateLines('\n\n', 10)).toBe(2));
+});
+
+describe('chunkLines', () => {
+  it('numbers lines across chunks', () => {
+    expect(chunkLines(['a\nb\n', 'c\nd', 'e\nf'])).toEqual([
+      { firstLine: 1, continues: false },
+      { firstLine: 3, continues: false },
+      { firstLine: 4, continues: true },
+    ]);
+  });
+  it('agrees with splitChunks on a real document', () => {
+    const text = JSON.stringify(Array.from({ length: 300 }, (_, i) => ({ i })), null, 2);
+    const chunks = splitChunks(text, 500);
+    const lines = chunkLines(chunks);
+    const last = chunks.length - 1;
+    const total = lines[last]!.firstLine + (chunks[last]!.match(/\n/g)?.length ?? 0);
+    expect(total).toBe(text.split('\n').length);
+  });
 });
