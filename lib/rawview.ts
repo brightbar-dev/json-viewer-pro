@@ -65,6 +65,11 @@ export class RawView {
     this.applyClasses();
   }
 
+  /** Stop watching chunks (the element itself is removed by its owner). */
+  destroy(): void {
+    this.observer?.disconnect();
+  }
+
   get wrapping(): boolean {
     return this.wrap;
   }

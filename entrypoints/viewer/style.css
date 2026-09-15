@@ -1,0 +1,191 @@
+/* The extension's own viewer page. Colours, buttons and the tree come from
+   lib/viewer.css (imported by main.ts); this file is only the page around them. */
+
+body {
+  --app-bar-h: 46px;
+}
+
+.app-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--app-bar-h);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--jvp-border);
+  background: var(--jvp-bg-alt);
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.app-title {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 6px 0;
+}
+
+.app-actions[hidden] {
+  display: none;
+}
+
+.file-name {
+  max-width: 40vw;
+  overflow: hidden;
+  color: var(--jvp-muted);
+  font-family: var(--jvp-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jvp-btn.jvp-btn-primary {
+  border-color: var(--jvp-accent);
+  background: var(--jvp-accent);
+  color: #ffffff;
+}
+
+.jvp-btn.jvp-btn-primary:hover:not(:disabled) {
+  background: var(--jvp-accent);
+  filter: brightness(1.1);
+}
+
+.editor-screen {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px 16px 16px;
+}
+
+.editor-screen[hidden] {
+  display: none;
+}
+
+.hint {
+  margin: 0 0 10px;
+  color: var(--jvp-muted);
+  font: 13px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.editor {
+  position: relative;
+  display: flex;
+  height: calc(100vh - var(--app-bar-h) - 120px);
+  min-height: 260px;
+  overflow: hidden;
+  border: 1px solid var(--jvp-border);
+  border-radius: 8px;
+  background: var(--jvp-bg);
+}
+
+.editor:focus-within {
+  border-color: var(--jvp-accent);
+  box-shadow: 0 0 0 1px var(--jvp-accent);
+}
+
+.gutter {
+  flex: none;
+  min-width: 52px;
+  margin: 0;
+  padding: 8px 10px 8px 8px;
+  overflow: hidden;
+  border-right: 1px solid var(--jvp-border);
+  background: var(--jvp-bg-alt);
+  color: var(--jvp-muted);
+  font: 13px/20px var(--jvp-font);
+  text-align: right;
+  user-select: none;
+}
+
+.gutter[hidden] {
+  display: none;
+}
+
+#input {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--jvp-text);
+  font: 13px/20px var(--jvp-font);
+  tab-size: 2;
+  white-space: pre;
+}
+
+.error-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: var(--jvp-error-bg);
+  pointer-events: none;
+}
+
+.error-line[hidden] {
+  display: none;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  margin-top: 8px;
+  color: var(--jvp-muted);
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.status.ok {
+  color: var(--jvp-string);
+}
+
+.status.warn {
+  color: var(--jvp-text);
+}
+
+.status.error {
+  color: var(--jvp-error);
+}
+
+.viewer-host[hidden] {
+  display: none;
+}
+
+/* The viewer's own sticky header sits under the page's app bar. */
+.viewer-host .jvp-header {
+  top: var(--app-bar-h);
+}
+
+.viewer-host .jvp-root {
+  min-height: calc(100vh - var(--app-bar-h));
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: 12px;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  border: 3px dashed var(--jvp-accent);
+  border-radius: 16px;
+  background: var(--jvp-bg);
+  opacity: 0.94;
+  color: var(--jvp-accent);
+  font: 600 20px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  pointer-events: none;
+}
+
+.drop-overlay[hidden] {
+  display: none;
+}

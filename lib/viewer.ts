@@ -9,7 +9,7 @@ import { analyze, type EmptyDoc, type ErrorDoc, type JsonDoc, type ViewerDoc } f
 import { addStyleSheet, copyText, el, flashLabel } from './dom';
 import { downloadName, formatMatchCount, formatNumber, formatSize, utf8Length } from './format';
 import { compileJsonPath, looksLikeJsonPath } from './jsonpath';
-import { openMenu, type MenuEntry } from './menu';
+import { closeMenu, openMenu, type MenuEntry } from './menu';
 import { errorExcerpt } from './parser';
 import { RawView } from './rawview';
 import {
@@ -36,17 +36,25 @@ export interface MountOptions {
   byteSize?: number;
   /** The document's URL, for download file names. */
   url?: string;
+  /** Mount inside this element instead of replacing the page's body. */
+  host?: HTMLElement;
+  /** Let the viewer own the theme and font state on <body> (default true). */
+  appearance?: boolean;
 }
 
 export interface ViewerController {
   /** Apply changed settings to the open viewer, without a reload. */
   applySettings(settings: Settings): void;
+  /** Remove the viewer and every listener it added, for pages that mount more than once. */
+  destroy(): void;
 }
 
 interface Context {
   opts: MountOptions;
   settings(): Settings;
   onSettings(listener: (settings: Settings) => void): void;
+  /** Aborted by destroy(): pass it to every listener added outside the viewer's own elements. */
+  signal: AbortSignal;
 }
 
 function button(label: string, title?: string): HTMLButtonElement {
@@ -63,7 +71,7 @@ function badge(text: string, title: string): HTMLElement {
 }
 
 /** Theme (following the system live when `auto`), font, size and indent, as CSS state on <body>. */
-function createAppearance(body: HTMLElement): (settings: Settings) => void {
+export function createAppearance(body: HTMLElement, signal?: AbortSignal): (settings: Settings) => void {
   let theme: Theme = 'auto';
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   const applyTheme = () => {
@@ -71,7 +79,7 @@ function createAppearance(body: HTMLElement): (settings: Settings) => void {
     body.classList.toggle('jvp-dark', dark);
     body.classList.toggle('jvp-light', !dark);
   };
-  media.addEventListener('change', applyTheme);
+  media.addEventListener('change', applyTheme, { signal });
   return (s) => {
     theme = s.theme;
     applyTheme();
@@ -82,25 +90,36 @@ function createAppearance(body: HTMLElement): (settings: Settings) => void {
   };
 }
 
-/** Replace the page with the viewer for `doc`. */
+let stylesAdded = false;
+
+/** Show the viewer for `doc`: replacing the page's body, or inside `opts.host`. */
 export function mountViewer(doc: ViewerDoc, opts: MountOptions): ViewerController {
-  addStyleSheet(css);
+  if (!stylesAdded) {
+    addStyleSheet(css);
+    stylesAdded = true;
+  }
+  const aborter = new AbortController();
   const body = document.body ?? document.documentElement.appendChild(document.createElement('body'));
-  const appearance = createAppearance(body);
+  const appearance = opts.appearance === false ? null : createAppearance(body, aborter.signal);
   let settings = opts.settings;
-  appearance(settings);
+  appearance?.(settings);
   const listeners: ((s: Settings) => void)[] = [];
-  const ctx: Context = { opts, settings: () => settings, onSettings: (l) => listeners.push(l) };
+  const ctx: Context = { opts, settings: () => settings, onSettings: (l) => listeners.push(l), signal: aborter.signal };
   const root = el('div', 'jvp-root');
-  body.replaceChildren(root);
+  (opts.host ?? body).replaceChildren(root);
   if (doc.kind === 'json') mountJson(root, doc, ctx);
   else if (doc.kind === 'error') mountError(root, doc, ctx);
   else mountEmpty(root, doc, ctx);
   return {
     applySettings(next) {
       settings = next;
-      appearance(next);
+      appearance?.(next);
       for (const l of listeners) l(next);
+    },
+    destroy() {
+      aborter.abort();
+      closeMenu();
+      root.remove();
     },
   };
 }
@@ -392,8 +411,12 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
     onMenu: rowMenu,
     onCopy: (node, what) => (what === 'value' ? copyValue(node) : copyPath(node)),
     imagePreview: () => ctx.settings().imagePreview,
-  });
+  }, ctx.signal);
   view.setRowHeight(rowHeightFor(ctx.settings().fontSize));
+  ctx.signal.addEventListener('abort', () => {
+    raw?.destroy();
+    table?.destroy();
+  });
   main.append(view.el);
   let raw: RawView | null = null;
   root.classList.add('jvp-mode-tree');
@@ -655,7 +678,9 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   });
 
   // Keyboard shortcuts: plain in-page listeners, so no `commands` permission.
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener(
+    'keydown',
+    (e) => {
     const target = e.target as HTMLElement | null;
     const inInput = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
     if (table) {
@@ -691,7 +716,9 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
       e.preventDefault();
       showLevel(Number(action.slice(-1)));
     }
-  });
+    },
+    { signal: ctx.signal },
+  );
 }
 
 function stateHeader(title: string, doc: ViewerDoc, opts: MountOptions): HTMLElement {
@@ -772,6 +799,7 @@ function mountError(root: HTMLElement, doc: ErrorDoc, ctx: Context): void {
   const rawView = new RawView(doc.raw, { mark: { start: lineStart, end: Math.max(lineEnd, lineStart + 1) } });
   rawView.setMetrics(ctx.settings().fontSize, rowHeightFor(ctx.settings().fontSize));
   ctx.onSettings((s) => rawView.setMetrics(s.fontSize, rowHeightFor(s.fontSize)));
+  ctx.signal.addEventListener('abort', () => rawView.destroy());
   const body = el('section', 'jvp-state jvp-raw-section');
   body.append(el('h2', 'jvp-raw-heading', 'Response body'), rawView.el);
   root.append(stateHeader(`Invalid ${what}`, doc, opts), panel, body);

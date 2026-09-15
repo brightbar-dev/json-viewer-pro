@@ -16,6 +16,7 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 - Search across keys and values with a live match count; Enter / Shift+Enter step through matches, opening the tree to each one
 - Filter mode — hide every row that does not match the search
 - JSONPath queries in the same box — start with `$`: `$.data[*].email`, `$..price`, `$.items[?(@.price < 10 && @.inStock)]`. Results show as a filtered tree with a count, Enter steps through them. A small hand-written evaluator (members, `*`, indices, slices, `..`, unions, filters with `== != < <= > >= && || !`), never `eval`; big integers compare exactly
+- A viewer page of its own, opened from the toolbar popup: paste JSON, open a file or drop one (JSON, JSONC with comments and trailing commas, NDJSON). It validates as you type, gives the line and column of any error, and formats or minifies, then shows the same tree. Local files work without granting file:// access
 - Table view for arrays of objects — one column per key, sortable (numbers numerically, big integers exactly), nested values as compact previews that open into formatted JSON, 60,000 rows without slowing down; open it from the toolbar or a row's menu
 - Full keyboard control of the tree — arrow keys move and open/close, Home/End jump, Enter toggles, `*` opens a whole subtree — built as a proper WAI-ARIA tree for screen readers
 - Path bar — the selected node's path as clickable breadcrumbs; copy it as JSONPath (`$.data[3].email`), a JS accessor (`data[3].email`) or a JSON Pointer (`/data/3/email`)
@@ -126,6 +127,22 @@ This extension:
 - Exposes no web-accessible resources, so web pages cannot probe for it
 - Shows image thumbnails only when you hover an image URL, loading the image from its own address (with no referrer); this can be turned off in the options
 - See our full [Privacy Policy](PRIVACY_POLICY.md)
+
+### Verified, not just promised
+
+Every CI run scans both built extensions with `scripts/check-privacy.mjs` and fails the build if the shipped code contains:
+- a network API: `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, WebRTC;
+- a remote address;
+- code built from strings: `eval`, `new Function`, string timers;
+- a manifest that asks for more than the `storage` permission (no host or optional permissions, nothing web-accessible, no external messaging).
+
+The only exceptions are listed in the script with the reason they are safe. Today that is the popup's links to our other extensions on the Chrome Web Store: ordinary links you can click, never loaded. Check it yourself:
+
+```bash
+npx wxt build && npx wxt build --browser firefox && npm run check:privacy
+```
+
+The rules are unit-tested in `tests/privacy.test.ts`.
 
 ## Store Listing Copy
 
