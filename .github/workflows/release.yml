@@ -84,6 +84,12 @@ jobs:
             exit 1
           fi
 
+          if [ "${{ vars.CWS_AUTO_PUBLISH }}" = "false" ]; then
+            echo "CWS_AUTO_PUBLISH=false: package uploaded to the item draft, NOT submitted for review."
+            echo "Submit it later from the dashboard or with the CWS API publish call (brightbar-dev/org-work RUNBOOK.md)."
+            exit 0
+          fi
+
           # Submit for review
           PUBLISH_RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X POST "https://www.googleapis.com/chromewebstore/v1.1/items/iodhhjpjemdfmmfffmejfnbbjbfafoac/publish" \
@@ -93,3 +99,8 @@ jobs:
           HTTP_CODE=$(echo "$PUBLISH_RESPONSE" | tail -1)
           BODY=$(echo "$PUBLISH_RESPONSE" | sed '$d')
           echo "Publish response ($HTTP_CODE): $BODY"
+
+          if [ "$HTTP_CODE" != "200" ] || ! echo "$BODY" | jq -e '.status | index("OK")' >/dev/null; then
+            echo "Publish not accepted"
+            exit 1
+          fi
