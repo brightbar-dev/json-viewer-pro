@@ -2,6 +2,20 @@
 
 All notable changes to JSON Viewer Pro will be documented in this file.
 
+## [0.5.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.4.0...json-viewer-pro-v0.5.0) (2026-09-13)
+
+
+### Features
+
+* add large and marquee promo tiles, update small tile with new icon ([a0c83cc](https://github.com/brightbar-dev/json-viewer-pro/commit/a0c83cc9e51111093367e706ea44036ec6d8dbae))
+* add search match count, filter mode, and keyboard shortcuts ([665eb12](https://github.com/brightbar-dev/json-viewer-pro/commit/665eb12ea006bb488baabc978c631c5b68668e8b))
+
+
+### Bug Fixes
+
+* **deps:** bump vitest to 4.1.11 to fix moderate path-traversal advisory ([#7](https://github.com/brightbar-dev/json-viewer-pro/issues/7)) ([6891896](https://github.com/brightbar-dev/json-viewer-pro/commit/68918968fa7c53a67542507cef4eb6840fd62e66))
+* two latent type errors on main, and make CI actually typecheck ([989ef2b](https://github.com/brightbar-dev/json-viewer-pro/commit/989ef2bbd082e22d46ea8573bd2ffcc194251992))
+
 ## [0.4.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.3.0...json-viewer-pro-v0.4.0) (2026-04-01)
 
 
