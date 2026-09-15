@@ -58,6 +58,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 // ---------- helpers ----------
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const within = (promise, ms, fallback) => Promise.race([promise, new Promise((r) => setTimeout(() => r(fallback), ms))]);
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 async function launch(dir) {
@@ -84,8 +85,8 @@ async function firstRender(dir, fixture) {
   let ms = -1;
   while (Date.now() - t0 < 60000) {
     // A hung renderer never answers, so every probe is bounded.
-    if (await within(page.evaluate(() => document.querySelector('.jvp-row, .jvp-state') !== null).catch(() => false), 2000, false)) { ms = Date.now() - t0; break; }
-    await page.waitForTimeout(25);
+    if (await within(page.evaluate(() => document.querySelector('.jvp-row, .jvp-state, .jvp-node') !== null).catch(() => false), 2000, false)) { ms = Date.now() - t0; break; }
+    await sleep(25); // Node-side: page.waitForTimeout would queue behind a hung renderer
   }
   if (ms < 0) {
     await within(ctx.close(), 10000);
@@ -109,7 +110,7 @@ async function interactions(dir) {
 
 async function interactionsIn(ctx, page) {
   await page.goto(`${base}/large.json`);
-  await page.waitForSelector('.jvp-row', { timeout: 60000 });
+  await page.waitForSelector('.jvp-row', { timeout: 60000 }); // the current engine's rows; older builds are reported as unable to run
   await page.waitForTimeout(800);
   await takeLongTasks(page);
   const rows = [];
