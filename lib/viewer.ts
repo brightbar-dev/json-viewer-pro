@@ -200,10 +200,10 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   linesBtn.setAttribute('aria-pressed', 'true');
 
   const info = el('span', 'jvp-info');
-  const status = el('span', 'jvp-status');
+  // Copy confirmations float over the page, so they never reflow the header.
+  const status = el('div', 'jvp-toast');
   status.setAttribute('role', 'status');
   status.setAttribute('aria-live', 'polite');
-  info.append(status);
   if (doc.format === 'ndjson') {
     const n = (doc.value as unknown[]).length;
     info.append(badge(`NDJSON · ${formatNumber(n)} line${n === 1 ? '' : 's'}`, 'Newline-delimited JSON, shown as an array of its lines'));
@@ -332,7 +332,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, ctx: Context): void {
   main.append(view.el);
   let raw: RawView | null = null;
   root.classList.add('jvp-mode-tree');
-  root.append(header, main);
+  root.append(header, main, status);
   updatePath(null);
   view.refresh();
 
