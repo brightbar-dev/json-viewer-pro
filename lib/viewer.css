@@ -182,6 +182,23 @@ body.jvp-dark {
   cursor: help;
 }
 
+.jvp-notice {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 3px 3px 10px;
+  border: 1px solid var(--jvp-search-match-border);
+  border-radius: 6px;
+  background: var(--jvp-search-match);
+  color: var(--jvp-text);
+  font-size: 12px;
+}
+
+.jvp-notice-text {
+  flex: 1;
+}
+
 /* ---------- Tree ---------- */
 
 .jvp-tree {
@@ -417,6 +434,21 @@ mark.jvp-search-match {
   border-radius: 2px;
   background: var(--jvp-error);
   color: var(--jvp-bg);
+}
+
+.jvp-state p.jvp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.jvp-raw-error {
+  border-radius: 2px;
+  background: var(--jvp-error-bg);
+  box-shadow: 0 0 0 1px var(--jvp-error);
+  color: inherit;
 }
 
 .jvp-raw-section .jvp-raw {

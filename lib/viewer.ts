@@ -3,7 +3,7 @@
  * deliberate error and empty states for everything else.
  */
 import css from './viewer.css?inline';
-import type { EmptyDoc, ErrorDoc, JsonDoc, ViewerDoc } from './document';
+import { analyze, type EmptyDoc, type ErrorDoc, type JsonDoc, type ViewerDoc } from './document';
 import { addStyleSheet, copyText, el, flashLabel } from './dom';
 import { formatMatchCount, formatNumber, formatSize, utf8Length } from './format';
 import { errorExcerpt } from './parser';
@@ -13,12 +13,10 @@ import { stringifyJson } from './serialize';
 import type { Theme } from './settings';
 import { resolveShortcut } from './shortcuts';
 import { expandByBudget, isContainerValue, TreeModel, type TNode } from './tree';
-import { TreeView } from './view';
+import { EXPAND_LIMIT, TreeView } from './view';
 
 /** Rows opened on first render (breadth first). */
 export const INITIAL_ROW_BUDGET = 1500;
-/** Nodes "Expand all" may materialise before it stops. */
-export const EXPAND_ALL_LIMIT = 2_000_000;
 /** Longest a search may hold the main thread before yielding a frame. */
 const SEARCH_SLICE_MS = 12;
 
@@ -70,17 +68,30 @@ function badge(text: string, title: string): HTMLElement {
   return b;
 }
 
-/** The untouched body, in chunks the browser lays out only while they are on screen. */
-function renderRaw(raw: string): HTMLElement {
+/**
+ * The untouched body, in chunks the browser lays out only while they are on
+ * screen. `mark` highlights a character range (the error line).
+ */
+function renderRaw(raw: string, mark?: { start: number; end: number }): HTMLElement {
   const box = el('div', 'jvp-raw');
   box.id = 'jvp-raw';
   // Monospace 13px is ~7.8px per character; the estimate only sizes the
   // scrollbar until a chunk has been laid out once (`auto` then remembers).
   const columns = Math.max(20, Math.floor((window.innerWidth - 32) / 7.8));
+  let offset = 0;
   for (const chunk of splitChunks(raw)) {
-    const pre = el('pre', 'jvp-raw-chunk', chunk);
+    const pre = el('pre', 'jvp-raw-chunk');
+    const end = offset + chunk.length;
+    if (mark && mark.start < end && mark.end > offset) {
+      const a = Math.max(mark.start, offset) - offset;
+      const b = Math.min(mark.end, end) - offset;
+      pre.append(chunk.slice(0, a), el('mark', 'jvp-raw-error', chunk.slice(a, b)), chunk.slice(b));
+    } else {
+      pre.textContent = chunk;
+    }
     pre.style.setProperty('contain-intrinsic-size', `auto ${estimateLines(chunk, columns) * 20}px`);
     box.append(pre);
+    offset = end;
   }
   return box;
 }
@@ -137,7 +148,7 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
     const n = (doc.value as unknown[]).length;
     info.append(badge(`NDJSON · ${formatNumber(n)} line${n === 1 ? '' : 's'}`, 'Newline-delimited JSON, shown as an array of its lines'));
   }
-  if (doc.format === 'jsonc') info.append(badge('JSONC', 'Comments and trailing commas were accepted'));
+  if (doc.format === 'jsonc') info.append(badge('JSONC', 'Parsed leniently: comments and trailing commas were accepted'));
   if (doc.jsonp) info.append(badge(`JSONP · ${doc.jsonp}()`, `The JSON was wrapped in a call to ${doc.jsonp}(…)`));
   if (doc.prefix) info.append(badge(`${doc.prefix} guard`, 'An anti-XSSI prefix was removed before parsing; Raw shows it'));
   if (lossless) {
@@ -151,11 +162,32 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
   info.append(el('span', 'jvp-size', sizeLabel(doc, opts)));
   toolbar.append(input, prevBtn, nextBtn, count, filterBtn, rawBtn, copyBtn, expandBtn, collapseBtn, info);
 
+  // Whatever the viewer holds back to stay responsive is announced here, with a way past it.
+  const notice = el('div', 'jvp-notice jvp-hidden');
+  notice.setAttribute('role', 'status');
+  toolbar.append(notice);
+  const hideNotice = () => notice.classList.add('jvp-hidden');
+  const showNotice = (text: string, actionLabel: string, action: () => void) => {
+    const go = button(actionLabel);
+    go.addEventListener('click', () => {
+      hideNotice();
+      action();
+    });
+    const dismiss = button('\u00d7', 'Dismiss');
+    dismiss.classList.add('jvp-btn-icon');
+    dismiss.setAttribute('aria-label', 'Dismiss');
+    dismiss.addEventListener('click', hideNotice);
+    notice.replaceChildren(el('span', 'jvp-notice-text', text), go, dismiss);
+    notice.classList.remove('jvp-hidden');
+  };
+  const limitText = `Stopped expanding at ${formatNumber(EXPAND_LIMIT)} nodes to keep the page responsive.`;
+
   const main = el('main', 'jvp-main');
   const view = new TreeView(model, {
     highlight: () => re,
     isCurrent,
     topInset: () => toolbar.offsetHeight,
+    onLimit: (expandFully) => showNotice(limitText, 'Expand everything', expandFully),
   });
   main.append(view.el);
   let rawEl: HTMLElement | null = null;
@@ -289,10 +321,15 @@ function mountJson(root: HTMLElement, doc: JsonDoc, opts: MountOptions): void {
   });
 
   const expandAll = () => {
-    const built = model.expandAll(EXPAND_ALL_LIMIT);
+    const complete = model.expandAll(EXPAND_LIMIT);
     view.refresh();
-    if (built >= EXPAND_ALL_LIMIT) {
-      expandBtn.title = `Expanded the first ${formatNumber(EXPAND_ALL_LIMIT)} nodes`;
+    if (complete) {
+      hideNotice();
+    } else {
+      showNotice(limitText, 'Expand everything', () => {
+        model.expandAll();
+        view.refresh();
+      });
     }
   };
   const collapseAll = () => {
@@ -375,8 +412,36 @@ function mountError(root: HTMLElement, doc: ErrorDoc, opts: MountOptions): void 
   }
   panel.append(excerpt);
 
+  if (doc.format === 'json') {
+    const actions = el('p', 'jvp-actions');
+    const lenient = button('Try a lenient parse', 'Accept comments and trailing commas (JSONC) to view the document anyway');
+    const outcome = el('span', 'jvp-muted');
+    lenient.addEventListener('click', () => {
+      const retry = analyze(doc.raw, 'json', { jsonc: true });
+      if (retry?.kind === 'json') {
+        root.replaceChildren();
+        window.scrollTo(0, 0);
+        mountJson(root, retry, opts);
+      } else if (retry?.kind === 'error') {
+        lenient.disabled = true;
+        outcome.textContent = `A lenient parse fails too: ${retry.error.message} \u2014 line ${formatNumber(retry.error.line)}, column ${formatNumber(retry.error.column)}.`;
+      }
+    });
+    actions.append(lenient, outcome);
+    panel.append(actions);
+  }
+
+  // Highlight the error's line in the raw body (or a window around it, on a very long line).
+  const at = doc.error.offset;
+  let lineStart = at > 0 ? doc.raw.lastIndexOf('\n', at - 1) + 1 : 0;
+  let lineEnd = doc.raw.indexOf('\n', at);
+  if (lineEnd === -1) lineEnd = doc.raw.length;
+  if (lineEnd - lineStart > 400) {
+    lineStart = Math.max(lineStart, at - 40);
+    lineEnd = Math.min(lineEnd, at + 40);
+  }
   const body = el('section', 'jvp-state jvp-raw-section');
-  body.append(el('h2', 'jvp-raw-heading', 'Response body'), renderRaw(doc.raw));
+  body.append(el('h2', 'jvp-raw-heading', 'Response body'), renderRaw(doc.raw, { start: lineStart, end: Math.max(lineEnd, lineStart + 1) }));
   root.append(stateToolbar(`Invalid ${what}`, doc, opts), panel, body);
 }
 

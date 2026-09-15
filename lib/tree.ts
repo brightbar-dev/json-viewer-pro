@@ -211,26 +211,37 @@ export class TreeModel {
   }
 
   /**
-   * Expand the node at `index` and everything beneath it. Returns the number
-   * of nodes it opened. Stops opening once `limit` nodes have been materialised
-   * so a single keypress can never build an unbounded tree.
+   * Expand the node at `index` and everything beneath it. Opening a node costs
+   * its child count, and nodes that would push the total past `limit` stay
+   * closed, so one keypress can never build an unbounded tree. Nodes that are
+   * already open cost nothing, so calling again with a higher limit continues.
+   * Returns true when the whole subtree is now open.
    */
-  expandSubtreeAt(index: number, limit = Infinity): number {
+  expandSubtreeAt(index: number, limit = Infinity): boolean {
     const node = this.rows[index];
-    if (!(node instanceof TNode) || !node.expandable) return 0;
-    if (node.expanded) this.collapseAt(index);
-    let built = 0;
+    if (!(node instanceof TNode) || !node.expandable) return true;
+    const wasOpen = node.expanded;
+    let cost = 0;
+    let complete = true;
     const stack: TNode[] = [node];
-    while (stack.length && built < limit) {
+    while (stack.length) {
       const n = stack.pop()!;
-      n.expanded = true;
+      if (!n.expanded) {
+        if (cost + n.size > limit) {
+          complete = false;
+          continue;
+        }
+        cost += n.size;
+        n.expanded = true;
+      }
       const kids = materialize(n);
-      built += kids.length;
       for (let i = kids.length - 1; i >= 0; i--) if (kids[i]!.expandable) stack.push(kids[i]!);
     }
-    node.expanded = false;
-    this.expandAt(index);
-    return built;
+    const end = wasOpen ? this.rows.indexOf(node.closeRow, index + 1) : index;
+    const block: Row[] = [];
+    appendDescendants(node, block, this.include);
+    this.rows = this.rows.slice(0, index + 1).concat(block, this.rows.slice(end + 1));
+    return complete;
   }
 
   /** Collapse everything below the root, leaving the root open. */
@@ -245,8 +256,8 @@ export class TreeModel {
     this.rebuild();
   }
 
-  /** Expand every node, stopping after `limit` nodes are materialised. */
-  expandAll(limit = Infinity): number {
+  /** Expand every node (within `limit`, see expandSubtreeAt). True when everything is open. */
+  expandAll(limit = Infinity): boolean {
     return this.expandSubtreeAt(0, limit);
   }
 

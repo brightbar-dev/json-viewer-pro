@@ -25,8 +25,8 @@ const MAX_SCROLL_PX = 8_000_000;
 const OVERSCAN = 15;
 /** Characters of a string shown before a "show more" affordance. */
 const STRING_CLIP = 10_000;
-/** Nodes Alt+click may materialise in one go. */
-const SUBTREE_LIMIT = 2_000_000;
+/** Most child nodes one "expand all" or Alt+click may open before it stops and says so. */
+export const EXPAND_LIMIT = 2_000_000;
 
 export interface TreeViewHooks {
   /** The active search, if any. */
@@ -37,6 +37,8 @@ export interface TreeViewHooks {
   topInset(): number;
   /** After the user expands or collapses something. */
   onToggle?(): void;
+  /** A subtree expand stopped at its safety limit; `expandFully` lifts it. */
+  onLimit?(expandFully: () => void): void;
 }
 
 function span(className: string, text?: string): HTMLSpanElement {
@@ -134,8 +136,13 @@ export class TreeView {
           n.expanded = false;
           if (n.children) for (const c of n.children) if (c.expanded) stack.push(c);
         }
-      } else {
-        this.model.expandSubtreeAt(index, SUBTREE_LIMIT);
+      } else if (!this.model.expandSubtreeAt(index, EXPAND_LIMIT)) {
+        this.hooks.onLimit?.(() => {
+          const at = this.model.indexOfNode(node);
+          if (at < 0) return;
+          this.model.expandSubtreeAt(at);
+          this.refresh();
+        });
       }
       this.refresh(index, y);
     } else {
@@ -366,6 +373,8 @@ export class TreeView {
     } else {
       this.appendText(v, JSON.stringify(s), re);
     }
+    // Virtual rows are one line and clip long values; the tooltip shows the rest.
+    if (this.virtual && s.length > 60) v.title = s.length > 2000 ? `${s.slice(0, 2000)}…` : s;
     row.appendChild(v);
     if (clipped) {
       const more = document.createElement('button');

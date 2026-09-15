@@ -80,11 +80,25 @@ describe('TreeModel rows', () => {
     m.expandSubtreeAt(0);
     expect(picture(m.rows)).toEqual(['{', '  a: {', '    b: {', '      c: [', '        0: 1', '      ]', '    }', '  }', '}']);
   });
-  it('expandSubtreeAt respects a materialisation limit', () => {
+  it('expandSubtreeAt stops at its limit, says so, and continues when called again', () => {
     const m = new TreeModel(Array.from({ length: 100 }, () => ({ x: [1, 2, 3] })));
-    const built = m.expandSubtreeAt(0, 150);
-    expect(built).toBeGreaterThanOrEqual(150);
-    expect(built).toBeLessThan(400);
+    expect(m.expandSubtreeAt(0, 150)).toBe(false);
+    const opened = (n = m.root) => (n.children ?? []).filter((c) => c.expanded).length;
+    expect(opened()).toBeGreaterThan(0);
+    expect(opened()).toBeLessThan(100);
+    const before = m.rows.length;
+    expect(m.expandSubtreeAt(0)).toBe(true);
+    expect(m.rows.length).toBeGreaterThan(before);
+    expect(m.rows).toHaveLength(1 + 100 * 7 + 1);
+  });
+
+  it('expandSubtreeAt on an already open node replaces its block exactly', () => {
+    const m = new TreeModel(sample());
+    m.expandAt(0);
+    m.expandSubtreeAt(0);
+    const patched = picture(m.rows);
+    m.rebuild();
+    expect(picture(m.rows)).toEqual(patched);
   });
 
   it('collapseAll leaves only the root open', () => {

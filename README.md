@@ -10,7 +10,8 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 - NDJSON / JSON Lines served as text is shown as an array of its lines
 - Large documents stay fast: a 16.7 MB, 60,000-object file renders in about a tenth of a second and stays responsive while you scroll, search and expand everything, because only the rows on screen are ever put in the page
 - Exact big numbers — integers beyond 2^53 (snowflake IDs, 64-bit keys) and long decimals are shown, searched and copied exactly as sent, never rounded
-- Invalid JSON gets an error view: the parser message, line and column, a highlighted excerpt, and the raw body
+- Invalid JSON gets an error view: the parser message, line and column, a highlighted excerpt, the raw body with the error line marked, and a one-click lenient parse (comments and trailing commas allowed) to view it anyway
+- Nothing is capped silently — a very long string or a multi-million-node Expand all stops with an on-screen notice and a one-click way past it
 - Collapsible tree view with syntax highlighting and item counts on collapsed nodes; opens as much of the document as fits in about 1,500 rows
 - Search across keys and values with a live match count; Enter / Shift+Enter step through matches, opening the tree to each one
 - Filter mode — hide every row that does not match the search
