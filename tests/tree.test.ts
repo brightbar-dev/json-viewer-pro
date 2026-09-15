@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LosslessNumber } from '../lib/lossless';
-import { expandByBudget, isCloseRow, kindOf, pathOf, TNode, TreeModel, type Row } from '../lib/tree';
+import { compareKeys, expandByBudget, isCloseRow, kindOf, pathOf, TNode, TreeModel, type Row } from '../lib/tree';
 
 /** A readable picture of the row list. */
 function picture(rows: Row[]): string[] {
@@ -149,4 +149,71 @@ describe('expandByBudget', () => {
   });
 
   it('a primitive root is one row', () => expect(expandByBudget(new TreeModel(42).root, 10)).toBe(1));
+});
+
+describe('sort keys (view only)', () => {
+  const doc = () => ({ zeta: 1, item10: { b: 1, a: 2 }, Alpha: [3, 1, 2], item2: true });
+  it('natural, case-insensitive order', () => {
+    expect(['item10', 'item2', 'Alpha', 'zeta'].sort(compareKeys)).toEqual(['Alpha', 'item2', 'item10', 'zeta']);
+  });
+  it('sorts object keys but never array order, and keeps expansion state', () => {
+    const m = new TreeModel(doc());
+    m.expandSubtreeAt(0);
+    m.setSortKeys(true);
+    expect(picture(m.rows)).toEqual(['{', '  Alpha: [', '    0: 3', '    1: 1', '    2: 2', '  ]', '  item2: true', '  item10: {', '    a: 2', '    b: 1', '  }', '  zeta: 1', '}']);
+    m.setSortKeys(false);
+    expect(picture(m.rows)[1]).toBe('  zeta: 1');
+    expect((m.rows[1] as TNode).index).toBe(0);
+  });
+  it('nodes built while sorting come out sorted', () => {
+    const m = new TreeModel(doc());
+    m.setSortKeys(true);
+    m.expandAt(0);
+    expect(picture(m.rows).slice(1, 3)).toEqual(['  Alpha: array(3)', '  item2: true']);
+  });
+  it('reveal still finds a key after sorting', () => {
+    const m = new TreeModel(doc());
+    m.setSortKeys(true);
+    const i = m.reveal(['item10', 'a']);
+    expect((m.rows[i] as TNode).value).toBe(2);
+  });
+});
+
+describe('levels and navigation', () => {
+  const doc = () => ({ a: { b: { c: { d: 1 } } }, e: [1, 2] });
+  it('expandToLevel opens exactly that many levels', () => {
+    const m = new TreeModel(doc());
+    m.expandSubtreeAt(0);
+    expect(m.expandToLevel(1)).toBe(true);
+    expect(picture(m.rows)).toEqual(['{', '  a: object(1)', '  e: array(2)', '}']);
+    m.expandToLevel(2);
+    expect(picture(m.rows)).toEqual(['{', '  a: {', '    b: object(1)', '  }', '  e: [', '    0: 1', '    1: 2', '  ]', '}']);
+  });
+  it('expandToLevel reports hitting its limit', () => {
+    const m = new TreeModel(Array.from({ length: 50 }, () => ({ x: 1, y: 2 })));
+    expect(m.expandToLevel(2, 60)).toBe(false);
+  });
+  it('stepRow skips closing brackets', () => {
+    const m = new TreeModel({ a: { b: 1 }, c: 2 });
+    m.expandSubtreeAt(0);
+    // rows: {, a: {, b: 1, }, c: 2, }
+    expect(m.stepRow(2, 1)).toBe(4);
+    expect(m.stepRow(4, -1)).toBe(2);
+    expect(m.stepRow(4, 1)).toBe(-1);
+    expect(m.stepRow(0, -1)).toBe(-1);
+    expect(m.lastNodeRow()).toBe(4);
+  });
+  it('parentRow', () => {
+    const m = new TreeModel({ a: { b: 1 }, c: 2 });
+    m.expandSubtreeAt(0);
+    expect(m.parentRow(2)).toBe(1);
+    expect(m.parentRow(1)).toBe(0);
+    expect(m.parentRow(0)).toBe(-1);
+  });
+  it('every node gets a distinct id', () => {
+    const m = new TreeModel({ a: 1, b: 2 });
+    m.expandAt(0);
+    const ids = m.rows.filter((r): r is TNode => r instanceof TNode).map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });

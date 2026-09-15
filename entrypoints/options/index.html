@@ -8,44 +8,109 @@
   <title>JSON Viewer Pro — Settings</title>
 </head>
 <body>
-  <div class="container">
+  <main class="container">
     <h1>JSON Viewer Pro Settings</h1>
+    <p class="lede">Changes are saved as you make them and apply to open JSON tabs right away. <span id="status" class="status" role="status" aria-live="polite"></span></p>
 
-    <div class="setting-group">
+    <section class="setting-group">
       <label class="setting">
         <input type="checkbox" id="enabled" checked>
-        <span>Enable JSON formatting</span>
+        <span>Format JSON responses</span>
       </label>
-      <p class="setting-desc">When enabled, JSON responses are automatically formatted with a tree view.</p>
-    </div>
+      <p class="setting-desc">Turn this off to see responses as the browser shows them. Applies to pages you open afterwards.</p>
+    </section>
 
-    <div class="setting-group">
-      <label class="setting-label">Theme</label>
-      <select id="theme">
-        <option value="auto">Auto (follow system)</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </div>
+    <section class="setting-group">
+      <h2>Appearance</h2>
+      <div class="field">
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="auto">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fontPreset">Font</label>
+        <select id="fontPreset">
+          <option value="">Default monospace</option>
+          <option value="'SF Mono'">SF Mono</option>
+          <option value="Menlo">Menlo</option>
+          <option value="Consolas">Consolas</option>
+          <option value="'Cascadia Code'">Cascadia Code</option>
+          <option value="'JetBrains Mono'">JetBrains Mono</option>
+          <option value="'Fira Code'">Fira Code</option>
+          <option value="'Source Code Pro'">Source Code Pro</option>
+          <option value="'Courier New'">Courier New</option>
+          <option value="custom">Other…</option>
+        </select>
+      </div>
+      <div class="field" id="fontCustomRow" hidden>
+        <label for="fontCustom">Font name</label>
+        <input type="text" id="fontCustom" placeholder="e.g. Iosevka" spellcheck="false" autocomplete="off">
+      </div>
+      <p class="setting-desc">Only fonts already installed on this computer are used — nothing is downloaded. A font that isn't installed falls back to the default.</p>
+      <div class="field">
+        <label for="fontSize">Text size</label>
+        <select id="fontSize">
+          <option value="11">11 px</option>
+          <option value="12">12 px</option>
+          <option value="13">13 px (default)</option>
+          <option value="14">14 px</option>
+          <option value="15">15 px</option>
+          <option value="16">16 px</option>
+          <option value="18">18 px</option>
+          <option value="20">20 px</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="indent">Indentation</label>
+        <select id="indent">
+          <option value="12">Narrow</option>
+          <option value="18">Normal</option>
+          <option value="24">Wide</option>
+          <option value="32">Extra wide</option>
+        </select>
+      </div>
+      <div class="preview" id="preview" aria-hidden="true"><span class="p-punct">{</span>
+  <span class="p-key">"id"</span><span class="p-punct">:</span> <span class="p-num">149883901923910003</span>
+  <span class="p-key">"name"</span><span class="p-punct">:</span> <span class="p-str">"Ada Lovelace"</span>
+  <span class="p-key">"active"</span><span class="p-punct">:</span> <span class="p-bool">true</span>
+<span class="p-punct">}</span></div>
+    </section>
 
-    <div class="actions">
-      <button id="save" class="btn btn-primary">Save</button>
-      <span id="status" class="status"></span>
-    </div>
+    <section class="setting-group">
+      <h2>Opening documents</h2>
+      <div class="field">
+        <label for="expandBudget">Open automatically</label>
+        <select id="expandBudget">
+          <option value="200">About 200 rows</option>
+          <option value="500">About 500 rows</option>
+          <option value="1500">About 1,500 rows (default)</option>
+          <option value="5000">About 5,000 rows</option>
+          <option value="20000">About 20,000 rows</option>
+        </select>
+      </div>
+      <p class="setting-desc">The viewer opens a document level by level until about this many rows are showing. Everything else stays one click — or <kbd>e</kbd>, or <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> — away. Applies to pages you open afterwards.</p>
+      <label class="setting">
+        <input type="checkbox" id="imagePreview" checked>
+        <span>Preview images when hovering an image URL</span>
+      </label>
+      <p class="setting-desc">The thumbnail is loaded from the image's own address, exactly as opening the link would. JSON Viewer Pro itself sends nothing anywhere.</p>
+    </section>
 
-    <div class="about">
+    <section class="about">
       <h2>About</h2>
-      <p>JSON Viewer Pro formats JSON responses in your browser with a clean, collapsible tree view.</p>
+      <p>JSON Viewer Pro formats JSON responses in your browser with a fast, collapsible tree view.</p>
       <ul>
-        <li>No ads, no tracking, no donation popups</li>
-        <li>Automatic JSON detection</li>
-        <li>Search keys and values</li>
-        <li>Copy values and paths</li>
-        <li>Light and dark themes</li>
-        <li>URL detection and linking</li>
+        <li>No ads, no tracking, no donation popups — and no network requests of its own</li>
+        <li>Opens documents of any size without freezing the page</li>
+        <li>Big numbers stay exact; invalid JSON shows the line and column of the error</li>
+        <li>Search, filter, keyboard navigation, path breadcrumbs, copy as valid JSON</li>
+        <li>Light, dark, and system themes</li>
       </ul>
-    </div>
-  </div>
+    </section>
+  </main>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

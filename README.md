@@ -15,11 +15,15 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 - Collapsible tree view with syntax highlighting and item counts on collapsed nodes; opens as much of the document as fits in about 1,500 rows
 - Search across keys and values with a live match count; Enter / Shift+Enter step through matches, opening the tree to each one
 - Filter mode — hide every row that does not match the search
-- Keyboard shortcuts — `/` or `Ctrl/Cmd+F` to search, `Enter` or `Ctrl/Cmd+G` for the next match, `Esc` to clear, `e`/`c` to expand/collapse all
-- Copy individual values (exactly) or JSONPath-style paths; `Alt`+click a node to expand or collapse its whole subtree
-- Toggle between the tree view and the raw response body
-- Light, dark, and auto (system) themes
-- URL detection — clickable links in string values
+- Full keyboard control of the tree — arrow keys move and open/close, Home/End jump, Enter toggles, `*` opens a whole subtree — built as a proper WAI-ARIA tree for screen readers
+- Path bar — the selected node's path as clickable breadcrumbs; copy it as JSONPath (`$.data[3].email`), a JS accessor (`data[3].email`) or a JSON Pointer (`/data/3/email`)
+- Copy any node as valid JSON — never a "3 items" placeholder, never stripped quotes — or copy/download the whole document formatted, minified or raw
+- Show 1, 2 or 3 levels, expand all, collapse all; `Alt`+click a node to expand or collapse its whole subtree
+- Sort keys alphabetically (view only — copies keep the original order)
+- Raw view of the untouched response, with line numbers and a wrap toggle
+- Value hints: clickable links, thumbnails for image URLs on hover, readable dates for ISO timestamps and epoch values, swatches for `#rrggbb` colours
+- Light, dark and system themes (following the system live), font, text size and indentation settings — all applied to open tabs instantly, no reload; both themes meet WCAG AA contrast, checked by a test
+- Keyboard shortcuts — `/` or `Ctrl/Cmd+F` to search, `Enter` or `Ctrl/Cmd+G` for the next match, `Esc` to clear, `e`/`c` to expand/collapse all, `1`–`3` for levels
 - File size display
 
 ### Keyboard shortcuts
@@ -32,7 +36,23 @@ Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON respo
 | `Esc` | Clear the search and unfocus |
 | `e` | Expand all nodes |
 | `c` | Collapse all nodes |
+| `1` / `2` / `3` | Show that many levels |
 | `Alt`+click | Expand or collapse a whole subtree |
+
+In the tree (click a row, or Tab to it):
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Previous / next row |
+| `→` | Open a node, or move to its first child |
+| `←` | Close a node, or move to its parent |
+| `Home` / `End` | First / last row |
+| `Page Up` / `Page Down` | Move a screenful |
+| `Enter` or `Space` | Open or close |
+| `*` | Open everything below |
+| `Ctrl/Cmd+C` | Copy the selected value as JSON (when no text is selected) |
+| `Ctrl/Cmd+Shift+C` | Copy the selected value's JSONPath |
+| `Shift+F10` or the menu key | Copy options for the selected row |
 
 `Ctrl/Cmd+F` is handled by the viewer on purpose: the browser's own find cannot
 reach text inside collapsed or off-screen nodes, and the built-in search opens
@@ -102,6 +122,7 @@ This extension:
 - Stores settings locally using Chrome's storage API
 - Makes no network requests of its own
 - Exposes no web-accessible resources, so web pages cannot probe for it
+- Shows image thumbnails only when you hover an image URL, loading the image from its own address (with no referrer); this can be turned off in the options
 - See our full [Privacy Policy](PRIVACY_POLICY.md)
 
 ## Store Listing Copy

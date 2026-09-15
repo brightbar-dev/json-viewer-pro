@@ -61,18 +61,22 @@ function start(cls: ContentClass): void {
   // text can be hidden right away. Plain text is only taken over if it parses.
   const declared = cls !== 'text';
   const reveal = declared ? addStyleSheet(HIDE_RAW_BODY) : null;
-  const settings = declared ? readSettings() : null;
+  const pending = declared ? readSettings() : null;
 
   const run = async () => {
     try {
       const source = bodySource();
       if (!source) return;
       if (cls === 'text' && !mightBeJson(source.head)) return;
-      const { enabled, theme } = await (settings ?? readSettings());
-      if (!enabled) return;
+      const settings = await (pending ?? readSettings());
+      if (!settings.enabled) return;
       const doc = analyze(source.full(), cls);
       if (!doc) return;
-      mountViewer(doc, { theme, contentType: document.contentType, byteSize: bodyBytes() });
+      const viewer = mountViewer(doc, { settings, contentType: document.contentType, byteSize: bodyBytes(), url: location.href });
+      // A change made in the popup or options page applies here at once: no reload, no tab juggling.
+      browser.storage.onChanged.addListener((changes, area) => {
+        if (area === 'sync' && changes.settings) viewer.applySettings(normalizeSettings(changes.settings.newValue));
+      });
     } finally {
       reveal?.();
     }

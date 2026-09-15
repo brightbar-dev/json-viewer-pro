@@ -8,16 +8,16 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 ## Architecture
 - **entrypoints/content.ts** — Content script on all pages at `document_start`. On an ordinary page it exits after one `document.contentType` comparison (no storage read, no DOM access). For JSON-like types it hides the raw body, reads settings, and at DOMContentLoaded hands the body text to `lib/`.
 - **entrypoints/background.ts** — Service worker for extension lifecycle (sets defaults on install).
-- **entrypoints/popup/** — Browser action popup with enable/disable toggle and theme selector.
-- **entrypoints/options/** — Full options page for advanced settings.
+- **entrypoints/popup/** — Browser action popup with enable/disable toggle and theme selector (merges into stored settings; never overwrites fields it does not show).
+- **entrypoints/options/** — Options page: theme, font, text size, indentation, initial expansion, image previews. Saves on every change; no Save button.
 - **lib/** — the viewer engine. Pure modules (unit-tested, no DOM):
   - `document.ts` — content-type classification, JSONP / anti-XSSI unwrapping, NDJSON, and `analyze()`, which parses a body exactly once
   - `lossless.ts` — `LosslessNumber`, the pre-scan deciding whether a lossless parse is needed, reviver `context.source` detection
   - `parser.ts` — hand-written iterative parser (error message + line/column, JSONC, lossless fallback) and `errorExcerpt`
   - `tree.ts` — `TreeModel`: lazily materialised `TNode`s and the flat list of visible rows; `expandByBudget`; `formatPath`
   - `search.ts` — time-sliceable search over the parsed value, match paths, the filter predicate
-  - `serialize.ts`, `raw.ts`, `format.ts`, `settings.ts`, `shortcuts.ts` — small helpers
-- **lib/** DOM modules: `view.ts` (row rendering, full vs virtual layout), `viewer.ts` (toolbar, search wiring, raw view, error and empty states), `dom.ts` (stylesheet injection, clipboard), `viewer.css`.
+  - `serialize.ts`, `raw.ts`, `format.ts` (incl. timestamp/colour/image detection, download names), `settings.ts`, `shortcuts.ts` (global keys and the tree keymap), `contrast.ts` — small helpers
+- **lib/** DOM modules: `view.ts` (row rendering, full vs virtual layout, selection, keyboard, ARIA, image preview), `viewer.ts` (header with toolbar/path bar/notices, search wiring, menus, levels, sort, live settings, error and empty states), `rawview.ts` (raw body with lazy line numbering), `menu.ts` (popover menu), `dom.ts` (stylesheet injection, clipboard), `viewer.css`.
 - **public/icon-{16,48,128}.png** — Extension icons.
 
 ## Key Implementation Details
@@ -31,6 +31,11 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - Collapsed rows show item counts. The toggle arrow is CSS generated content (`.jvp-open`), so it never lands in copied text.
 - **Search** walks the parsed value (not the DOM) in slices of at most 12 ms, debounced. It reveals and scrolls to the current match (Enter / Shift+Enter, Ctrl/Cmd+G); filter mode keeps matches, their ancestors and their descendants. Array indices never match.
 - Keyboard shortcuts are plain in-page `keydown` listeners — deliberately NOT the `commands` manifest key, which would add a permission
+- **Selection and keyboard**: the tree container is `role="tree"` with `tabindex=0` and keeps focus itself, pointing `aria-activedescendant` at the selected row (`id="jvp-r<TNode.id>"`), so virtual re-rendering never drops focus. Rows are `treeitem`s with `aria-level`/`aria-setsize`/`aria-posinset`/`aria-expanded`; closing-bracket rows are `aria-hidden`. Clicking a row selects it; clicking its label (arrow, key, bracket, count) also toggles it.
+- **Copy is always valid JSON**: row menus and Ctrl/Cmd+C copy `stringifyJson(node.value)` (lossless); paths come from `formatPath` / `formatJsPath` / `formatJsonPointer`. Downloads use an `<a download>` blob link — no `downloads` permission.
+- **Settings apply live**: `mountViewer` returns a controller; the content script calls `applySettings` from `storage.onChanged`. Theme/font/size/indent are CSS custom properties on `<body>`; row height follows the font size (`rowHeightFor`). `expandBudget` and `enabled` apply to pages opened afterwards.
+- **Contrast is tested**: `tests/contrast.test.ts` reads `lib/viewer.css` and requires 4.5:1 for every text colour on every row/highlight background in both themes. Change a colour, run the test.
+- Image previews load the hovered URL in an `<img referrerpolicy=no-referrer>` (setting `imagePreview`); PRIVACY_POLICY.md says so — keep it true.
 - The Raw view shows the original response body verbatim, not a re-serialisation of the parsed value; Copy copies whichever view is on screen. Raw text is split into `content-visibility: auto` chunks so a 16 MB body is not laid out all at once.
 - **No web-accessible resources**: `viewer.css` is imported as a string (`?inline`) and adopted as a constructable stylesheet — pages cannot probe for the extension, and a response's CSP (`default-src 'none'`, `sandbox`) does not block the styles.
 - Uses `browser.*` API (WXT polyfill) — works in both Chrome and Firefox

@@ -4,7 +4,7 @@
  * slices on a huge document without freezing the page. Pure and unit-tested.
  */
 import { LosslessNumber } from './lossless';
-import { isContainerValue, type Key, type TNode } from './tree';
+import { compareKeys, isContainerValue, type Key, type TNode } from './tree';
 
 /** Case-insensitive literal matcher, or null for an empty query. */
 export function compileQuery(query: string): RegExp | null {
@@ -62,9 +62,10 @@ interface Frame {
   len: number;
 }
 
-function frame(c: object): Frame {
+function frame(c: object, sortKeys: boolean): Frame {
   if (Array.isArray(c)) return { c, keys: null, i: 0, len: c.length };
   const keys = Object.keys(c);
+  if (sortKeys) keys.sort(compareKeys);
   return { c, keys, i: 0, len: keys.length };
 }
 
@@ -73,7 +74,13 @@ function frame(c: object): Frame {
  * `slice` entries so a caller can spread the work across frames. Drain it in
  * one go (`for (const _ of searchSteps(...));`) for a synchronous search.
  */
-export function* searchSteps(root: unknown, re: RegExp, result: SearchResult, slice = 4000): Generator<void, void, void> {
+export function* searchSteps(
+  root: unknown,
+  re: RegExp,
+  result: SearchResult,
+  slice = 4000,
+  sortKeys = false,
+): Generator<void, void, void> {
   if (matchFlags(null, root, re)) {
     result.containers.push(null);
     result.keys.push(null);
@@ -84,7 +91,7 @@ export function* searchSteps(root: unknown, re: RegExp, result: SearchResult, sl
     return;
   }
 
-  const stack: Frame[] = [frame(root)];
+  const stack: Frame[] = [frame(root, sortKeys)];
   let steps = 0;
 
   const registerPath = () => {
@@ -114,16 +121,16 @@ export function* searchSteps(root: unknown, re: RegExp, result: SearchResult, sl
       result.keys.push(key);
       result.count++;
     }
-    if (isContainerValue(value)) stack.push(frame(value));
+    if (isContainerValue(value)) stack.push(frame(value, sortKeys));
     if (++steps % slice === 0) yield;
   }
   result.done = true;
 }
 
 /** Synchronous search. */
-export function searchAll(root: unknown, re: RegExp): SearchResult {
+export function searchAll(root: unknown, re: RegExp, sortKeys = false): SearchResult {
   const result = emptyResult();
-  const it = searchSteps(root, re, result, Infinity);
+  const it = searchSteps(root, re, result, Infinity, sortKeys);
   while (!it.next().done);
   return result;
 }

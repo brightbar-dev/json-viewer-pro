@@ -31,26 +31,39 @@ export function isContainerValue(v: unknown): v is object {
   return v !== null && typeof v === 'object' && !(v instanceof LosslessNumber);
 }
 
+let nextId = 1;
+
+/** Key order for the view-only "sort keys" mode: natural ("item2" before "item10"), then exact. */
+const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+export function compareKeys(a: string, b: string): number {
+  return collator.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0);
+}
+
 export class TNode {
+  /** Unique per page; used for element ids (aria-activedescendant). */
+  readonly id = nextId++;
   readonly key: Key;
   readonly value: unknown;
   readonly parent: TNode | null;
   readonly depth: number;
   readonly kind: Kind;
-  /** Position among its siblings. */
-  readonly index: number;
+  /** Position among its siblings as displayed. */
+  index: number;
+  /** Position among its siblings in the document. */
+  readonly order: number;
   expanded = false;
   children: TNode[] | null = null;
   private _size = -1;
   private _close: CloseRow | null = null;
 
-  constructor(key: Key, value: unknown, parent: TNode | null, index: number) {
+  constructor(key: Key, value: unknown, parent: TNode | null, index: number, order = index) {
     this.key = key;
     this.value = value;
     this.parent = parent;
     this.depth = parent ? parent.depth + 1 : 0;
     this.kind = kindOf(value);
     this.index = index;
+    this.order = order;
   }
 
   get isContainer(): boolean {
@@ -88,7 +101,7 @@ export function isCloseRow(row: Row | undefined): row is CloseRow {
   return row !== undefined && !(row instanceof TNode);
 }
 
-export function materialize(node: TNode): TNode[] {
+export function materialize(node: TNode, sortKeys = false): TNode[] {
   if (node.children) return node.children;
   const out: TNode[] = [];
   if (node.kind === 'array') {
@@ -97,10 +110,18 @@ export function materialize(node: TNode): TNode[] {
   } else if (node.kind === 'object') {
     const obj = node.value as Record<string, unknown>;
     let i = 0;
-    for (const k of Object.keys(obj)) out.push(new TNode(k, obj[k], node, i++));
+    for (const k of Object.keys(obj)) out.push(new TNode(k, obj[k], node, i, i++));
+    if (sortKeys) sortChildren(out, true);
   }
   node.children = out;
   return out;
+}
+
+/** Order object children by key (or back to document order), keeping their state. */
+function sortChildren(kids: TNode[], byKey: boolean): void {
+  if (byKey) kids.sort((a, b) => compareKeys(a.key as string, b.key as string));
+  else kids.sort((a, b) => a.order - b.order);
+  for (let i = 0; i < kids.length; i++) kids[i]!.index = i;
 }
 
 /** Keys from the root to `node` (the root itself has an empty path). */
@@ -122,15 +143,31 @@ export function formatPath(path: readonly (string | number)[]): string {
   return out;
 }
 
+/** JavaScript accessor relative to the document: `data[3].email`, `["full name"]`. Empty for the root. */
+export function formatJsPath(path: readonly (string | number)[]): string {
+  let out = '';
+  for (const k of path) {
+    if (typeof k === 'number') out += `[${k}]`;
+    else if (IDENT.test(k)) out += out ? `.${k}` : k;
+    else out += `[${JSON.stringify(k)}]`;
+  }
+  return out;
+}
+
+/** RFC 6901 JSON Pointer: `/data/3/email`. Empty for the root. */
+export function formatJsonPointer(path: readonly (string | number)[]): string {
+  return path.map((k) => `/${String(k).replace(/~/g, '~0').replace(/\//g, '~1')}`).join('');
+}
+
 export type Include = (node: TNode) => boolean;
 
 /**
  * Append the visible rows beneath `node` (not `node` itself): its children in
  * order, recursing into expanded ones, then its closing-bracket row.
  */
-function appendDescendants(node: TNode, out: Row[], include: Include | null): void {
+function appendDescendants(node: TNode, out: Row[], include: Include | null, sortKeys: boolean): void {
   if (!node.expanded || !node.expandable) return;
-  const kids = (n: TNode) => (include ? materialize(n).filter(include) : materialize(n));
+  const kids = (n: TNode) => (include ? materialize(n, sortKeys).filter(include) : materialize(n, sortKeys));
   const stack: { node: TNode; kids: TNode[]; i: number }[] = [{ node, kids: kids(node), i: 0 }];
   while (stack.length) {
     const f = stack[stack.length - 1]!;
@@ -158,6 +195,7 @@ export class TreeModel {
   readonly root: TNode;
   rows: Row[] = [];
   private include: Include | null = null;
+  private _sortKeys = false;
 
   constructor(value: unknown) {
     this.root = new TNode(null, value, null, 0);
@@ -168,10 +206,28 @@ export class TreeModel {
     return this.include !== null;
   }
 
+  get sortKeys(): boolean {
+    return this._sortKeys;
+  }
+
   rebuild(): void {
     const out: Row[] = [this.root];
-    appendDescendants(this.root, out, this.include);
+    appendDescendants(this.root, out, this.include, this._sortKeys);
     this.rows = out;
+  }
+
+  /** View-only key sorting. Already-built nodes are reordered in place, so expansion state survives. */
+  setSortKeys(on: boolean): void {
+    if (on === this._sortKeys) return;
+    this._sortKeys = on;
+    const stack: TNode[] = [this.root];
+    while (stack.length) {
+      const n = stack.pop()!;
+      if (!n.children) continue;
+      if (n.kind === 'object') sortChildren(n.children, on);
+      for (const c of n.children) if (c.children) stack.push(c);
+    }
+    this.rebuild();
   }
 
   /** Show only nodes for which `include` is true (null shows everything). */
@@ -186,7 +242,7 @@ export class TreeModel {
     if (!(node instanceof TNode) || node.expanded || !node.expandable) return 0;
     node.expanded = true;
     const add: Row[] = [];
-    appendDescendants(node, add, this.include);
+    appendDescendants(node, add, this.include, this._sortKeys);
     this.rows = insertAt(this.rows, index + 1, add);
     return add.length;
   }
@@ -234,12 +290,12 @@ export class TreeModel {
         cost += n.size;
         n.expanded = true;
       }
-      const kids = materialize(n);
+      const kids = materialize(n, this._sortKeys);
       for (let i = kids.length - 1; i >= 0; i--) if (kids[i]!.expandable) stack.push(kids[i]!);
     }
     const end = wasOpen ? this.rows.indexOf(node.closeRow, index + 1) : index;
     const block: Row[] = [];
-    appendDescendants(node, block, this.include);
+    appendDescendants(node, block, this.include, this._sortKeys);
     this.rows = this.rows.slice(0, index + 1).concat(block, this.rows.slice(end + 1));
     return complete;
   }
@@ -262,6 +318,56 @@ export class TreeModel {
   }
 
   /**
+   * Show exactly `level` levels: nodes shallower than that open, everything
+   * deeper closed. Opening costs child counts against `limit`, as in
+   * expandSubtreeAt. True when every node that should be open is.
+   */
+  expandToLevel(level: number, limit = Infinity): boolean {
+    let cost = 0;
+    let complete = true;
+    const stack: TNode[] = [this.root];
+    while (stack.length) {
+      const n = stack.pop()!;
+      if (!n.expandable) continue;
+      if (n.depth < level) {
+        if (!n.expanded) {
+          if (cost + n.size > limit) {
+            complete = false;
+            continue;
+          }
+          cost += n.size;
+          n.expanded = true;
+        }
+        for (const c of materialize(n, this._sortKeys)) if (c.expandable) stack.push(c);
+      } else {
+        n.expanded = false;
+        if (n.children) for (const c of n.children) if (c.expanded) stack.push(c);
+      }
+    }
+    this.rebuild();
+    return complete;
+  }
+
+  /** The next (dir 1) or previous (dir -1) node row, skipping closing brackets; -1 past either end. */
+  stepRow(index: number, dir: 1 | -1): number {
+    for (let i = index + dir; i >= 0 && i < this.rows.length; i += dir) {
+      if (this.rows[i] instanceof TNode) return i;
+    }
+    return -1;
+  }
+
+  /** Row of the parent of the node at `index`, or -1. */
+  parentRow(index: number): number {
+    const node = this.rows[index];
+    if (!(node instanceof TNode) || !node.parent) return -1;
+    return this.rows.lastIndexOf(node.parent, index - 1);
+  }
+
+  lastNodeRow(): number {
+    return this.stepRow(this.rows.length, -1);
+  }
+
+  /**
    * Expand every node for which `open` is true, walking only into containers
    * it opens. Used to reveal all search hits at once.
    */
@@ -271,7 +377,7 @@ export class TreeModel {
       const n = stack.pop()!;
       if (!n.expandable || !open(n)) continue;
       n.expanded = true;
-      for (const c of materialize(n)) if (c.expandable) stack.push(c);
+      for (const c of materialize(n, this._sortKeys)) if (c.expandable) stack.push(c);
     }
     if (rebuild) this.rebuild();
   }
@@ -286,7 +392,7 @@ export class TreeModel {
     for (const k of path) {
       if (!node.expandable) return -1;
       if (!node.expanded) this.expandAt(index);
-      const kids = materialize(node);
+      const kids = materialize(node, this._sortKeys);
       const child = node.kind === 'array' ? kids[k as number] : kids.find((c) => c.key === k);
       if (!child) return -1;
       index = this.rows.indexOf(child, index + 1);
@@ -308,12 +414,12 @@ export class TreeModel {
  * the result reads top-down rather than as a scatter of open nodes.
  * Returns the resulting row count.
  */
-export function expandByBudget(root: TNode, budget: number): number {
+export function expandByBudget(root: TNode, budget: number, sortKeys = false): number {
   let rows = 1;
   if (!root.expandable) return rows;
   root.expanded = true;
   rows += root.size + 1;
-  let level = materialize(root).filter((c) => c.expandable);
+  let level = materialize(root, sortKeys).filter((c) => c.expandable);
   while (level.length) {
     const next: TNode[] = [];
     let skipped = false;
@@ -322,7 +428,7 @@ export function expandByBudget(root: TNode, budget: number): number {
       if (rows + cost <= budget) {
         n.expanded = true;
         rows += cost;
-        for (const c of materialize(n)) if (c.expandable) next.push(c);
+        for (const c of materialize(n, sortKeys)) if (c.expandable) next.push(c);
       } else {
         skipped = true;
       }
