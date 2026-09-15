@@ -2,6 +2,26 @@
 
 All notable changes to JSON Viewer Pro will be documented in this file.
 
+## [0.6.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.5.0...json-viewer-pro-v0.6.0) (2026-09-15)
+
+
+### Features
+
+* a viewer page for pasted, opened and dropped JSON, and a CI-enforced no-network check ([#14](https://github.com/brightbar-dev/json-viewer-pro/issues/14)) ([5f7f501](https://github.com/brightbar-dev/json-viewer-pro/commit/5f7f501230db1599f61c195f065f984ad19a62b9))
+* design pass, popup tab status and a first-run welcome page ([#15](https://github.com/brightbar-dev/json-viewer-pro/issues/15)) ([2ef6f37](https://github.com/brightbar-dev/json-viewer-pro/commit/2ef6f37d04631628446f2f45a5656ca74f25ce57))
+* JSONPath query bar and table view ([#13](https://github.com/brightbar-dev/json-viewer-pro/issues/13)) ([b7a8f36](https://github.com/brightbar-dev/json-viewer-pro/commit/b7a8f36dcdb0e9e75bcfe21231baa2570a14daeb))
+* keyboard tree with path bar, copy as valid JSON, levels, sort keys, value hints and live settings ([#12](https://github.com/brightbar-dev/json-viewer-pro/issues/12)) ([621eeb4](https://github.com/brightbar-dev/json-viewer-pro/commit/621eeb403d71474d83b6d1a7bc22e52163314a86))
+
+
+### Bug Fixes
+
+* drop the retired Tailwind CSS Lookup from the cross-promotion links ([#9](https://github.com/brightbar-dev/json-viewer-pro/issues/9)) ([5db2dea](https://github.com/brightbar-dev/json-viewer-pro/commit/5db2deac9578ffef0b4f1c749ef2f8234e5753ba))
+
+
+### Performance
+
+* a rendering engine that never hangs — lazy virtualised tree, lossless numbers, error view, wider detection ([#11](https://github.com/brightbar-dev/json-viewer-pro/issues/11)) ([23e391e](https://github.com/brightbar-dev/json-viewer-pro/commit/23e391e5ecd1b0150fca7b24c1354abbb8eef713))
+
 ## [0.5.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.4.0...json-viewer-pro-v0.5.0) (2026-09-13)
 
 
