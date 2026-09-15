@@ -15,9 +15,11 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
   - `lossless.ts` — `LosslessNumber`, the pre-scan deciding whether a lossless parse is needed, reviver `context.source` detection
   - `parser.ts` — hand-written iterative parser (error message + line/column, JSONC, lossless fallback) and `errorExcerpt`
   - `tree.ts` — `TreeModel`: lazily materialised `TNode`s and the flat list of visible rows; `expandByBudget`; `formatPath`
-  - `search.ts` — time-sliceable search over the parsed value, match paths, the filter predicate
+  - `search.ts` — time-sliceable search over the parsed value, match paths, the filter predicate; `resultFromPaths`/`matchLookup` turn JSONPath matches into the same result shape
+  - `jsonpath.ts` — the JSONPath subset: hand-written parser and evaluator (no `eval`/`Function`), positioned errors, match limit
+  - `tabular.ts` — table view logic: `isTabular`, column union, cell previews, exact sorting
   - `serialize.ts`, `raw.ts`, `format.ts` (incl. timestamp/colour/image detection, download names), `settings.ts`, `shortcuts.ts` (global keys and the tree keymap), `contrast.ts` — small helpers
-- **lib/** DOM modules: `view.ts` (row rendering, full vs virtual layout, selection, keyboard, ARIA, image preview), `viewer.ts` (header with toolbar/path bar/notices, search wiring, menus, levels, sort, live settings, error and empty states), `rawview.ts` (raw body with lazy line numbering), `menu.ts` (popover menu), `dom.ts` (stylesheet injection, clipboard), `viewer.css`.
+- **lib/** DOM modules: `view.ts` (row rendering, full vs virtual layout, selection, keyboard, ARIA, image preview), `viewer.ts` (header with toolbar/path bar/notices, search wiring, menus, levels, sort, live settings, error and empty states), `rawview.ts` (raw body with lazy line numbering), `table.ts` (virtualised table in its own scroll box), `menu.ts` (popover menu), `dom.ts` (stylesheet injection, clipboard), `viewer.css`.
 - **public/icon-{16,48,128}.png** — Extension icons.
 
 ## Key Implementation Details
@@ -30,6 +32,9 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - The error view offers "Try a lenient parse" (`analyze(raw, 'json', { jsonc: true })`): comments and trailing commas accepted, shown with a JSONC badge.
 - Collapsed rows show item counts. The toggle arrow is CSS generated content (`.jvp-open`), so it never lands in copied text.
 - **Search** walks the parsed value (not the DOM) in slices of at most 12 ms, debounced. It reveals and scrolls to the current match (Enter / Shift+Enter, Ctrl/Cmd+G); filter mode keeps matches, their ancestors and their descendants. Array indices never match.
+- **JSONPath** uses the same search box: a query starting with `$` (`looksLikeJsonPath`) is compiled by `lib/jsonpath.ts`, capped at 100,000 matches (the count says so), converted with `resultFromPaths`, and shown with filter mode switched on automatically (`autoFilter`, undone when the box goes back to plain text).
+- **Table view** (`lib/table.ts`) opens for the selected array of objects (or its nearest such ancestor, or the document). It has its own scroll box so the header can stick; Escape or *Back to tree* closes it, and a row number or *Show in tree* reveals that element.
+- **No raw control characters in source**: the Write tool turns `\u0000`-style escapes into the characters themselves, and a NUL byte makes git treat a file as binary. Keep escapes as escapes (this repo had NUL bytes in `serialize.ts`/`viewer.ts` until PR 3a).
 - Keyboard shortcuts are plain in-page `keydown` listeners — deliberately NOT the `commands` manifest key, which would add a permission
 - **Selection and keyboard**: the tree container is `role="tree"` with `tabindex=0` and keeps focus itself, pointing `aria-activedescendant` at the selected row (`id="jvp-r<TNode.id>"`), so virtual re-rendering never drops focus. Rows are `treeitem`s with `aria-level`/`aria-setsize`/`aria-posinset`/`aria-expanded`; closing-bracket rows are `aria-hidden`. Clicking a row selects it; clicking its label (arrow, key, bracket, count) also toggles it.
 - **Copy is always valid JSON**: row menus and Ctrl/Cmd+C copy `stringifyJson(node.value)` (lossless); paths come from `formatPath` / `formatJsPath` / `formatJsonPointer`. Downloads use an `<a download>` blob link — no `downloads` permission.

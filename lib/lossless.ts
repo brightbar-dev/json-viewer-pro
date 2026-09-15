@@ -154,3 +154,19 @@ export function parseWithSource(text: string): { value: unknown; preserved: numb
   const value: unknown = JSON.parse(text, reviver as (k: string, v: unknown) => unknown);
   return { value, preserved };
 }
+
+const INTEGER = /^-?\d+$/;
+
+/** Compare two numbers exactly, including integers beyond 2^53 kept as LosslessNumber. */
+export function compareNumbers(a: number | LosslessNumber, b: number | LosslessNumber): number {
+  const sa = a instanceof LosslessNumber ? a.source : String(a);
+  const sb = b instanceof LosslessNumber ? b.source : String(b);
+  if ((a instanceof LosslessNumber || b instanceof LosslessNumber) && INTEGER.test(sa) && INTEGER.test(sb)) {
+    const x = BigInt(sa);
+    const y = BigInt(sb);
+    return x < y ? -1 : x > y ? 1 : 0;
+  }
+  const x = Number(sa);
+  const y = Number(sb);
+  return x < y ? -1 : x > y ? 1 : 0;
+}

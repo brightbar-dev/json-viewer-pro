@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { LosslessNumber } from '../lib/lossless';
 import {
-  compileQuery, emptyResult, filterIncludes, matchFlags, MATCH_KEY, MATCH_VALUE, pathOfMatch, primitiveText, searchAll, searchSteps,
+  compileQuery, emptyResult, filterIncludes, matchFlags, matchLookup, MATCH_KEY, MATCH_VALUE, nodeMatches, pathOfMatch, primitiveText,
+  resultFromPaths, searchAll, searchSteps,
 } from '../lib/search';
-import { isCloseRow, TreeModel, type Row } from '../lib/tree';
+import { isCloseRow, TNode, TreeModel, type Row } from '../lib/tree';
 
 const doc = () => ({
   user: { name: 'Ada', email: 'ada@example.com' },
@@ -98,7 +99,7 @@ describe('filterIncludes', () => {
     const r = searchAll(d, re);
     const m = new TreeModel(d);
     m.expandWhere((n) => typeof n.value === 'object' && n.value !== null && r.parents.has(n.value), false);
-    m.setFilter(filterIncludes(r, re));
+    m.setFilter(filterIncludes(r, (n) => nodeMatches(n, re)));
     expect(keysOf(m.rows)).toEqual(['root', 'user', 'name', 'email', '/user', '/root']);
   });
 
@@ -108,7 +109,7 @@ describe('filterIncludes', () => {
     const r = searchAll(d, re);
     const m = new TreeModel(d);
     m.expandWhere((n) => typeof n.value === 'object' && n.value !== null && r.parents.has(n.value), false);
-    m.setFilter(filterIncludes(r, re));
+    m.setFilter(filterIncludes(r, (n) => nodeMatches(n, re)));
     expect(keysOf(m.rows)).toEqual(['root', 'user', 'tags', '1', '/tags', '/root']);
     m.expandAt(1); // open the matching "user" object: all of its children stay visible
     expect(keysOf(m.rows)).toEqual(['root', 'user', 'name', 'email', '/user', 'tags', '1', '/tags', '/root']);
@@ -121,5 +122,32 @@ describe('search order follows sort keys', () => {
     const re = compileQuery('x')!;
     expect(searchAll(d, re).keys).toEqual(['zulu', 'alpha', 'mike']);
     expect(searchAll(d, re, true).keys).toEqual(['alpha', 'mike', 'zulu']);
+  });
+});
+
+describe('results from JSONPath match paths', () => {
+  const d = doc();
+  const paths = [['user', 'email'], ['tags', 1], []] as (string | number)[][];
+  it('round-trips through pathOfMatch', () => {
+    const r = resultFromPaths(d, paths);
+    expect(r.count).toBe(3);
+    expect(r.done).toBe(true);
+    expect([0, 1, 2].map((i) => pathOfMatch(r, i))).toEqual(paths);
+    expect(r.parents.get(d.user)).toEqual({ parent: d, key: 'user' });
+  });
+  it('matchLookup identifies matched nodes, including the root and array elements', () => {
+    const r = resultFromPaths(d, paths);
+    const isMatch = matchLookup(r);
+    const m = new TreeModel(d);
+    m.expandSubtreeAt(0);
+    const matched = m.rows.filter((row): row is TNode => row instanceof TNode && isMatch(row)).map((n) => n.key);
+    expect(matched).toEqual([null, 'email', 1]);
+  });
+  it('filters the tree down to the matches and their ancestors', () => {
+    const r = resultFromPaths(d, [['user', 'email']]);
+    const m = new TreeModel(d);
+    m.expandWhere((n) => typeof n.value === 'object' && n.value !== null && r.parents.has(n.value), false);
+    m.setFilter(filterIncludes(r, matchLookup(r)));
+    expect(keysOf(m.rows)).toEqual(['root', 'user', 'email', '/user', '/root']);
   });
 });
