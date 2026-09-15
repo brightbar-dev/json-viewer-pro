@@ -32,5 +32,9 @@ for (const theme of ['.jvp-light', '.jvp-dark']) {
     }
     it('button text on the accent colour', () => expect(contrastRatio('#ffffff', v['--jvp-accent']!)).toBeGreaterThanOrEqual(4.5));
     it('error text on the error background', () => expect(contrastRatio(v['--jvp-text']!, v['--jvp-error-bg']!)).toBeGreaterThanOrEqual(4.5));
+    it('toolbar and badge text on their backgrounds', () => {
+      const pairs = [['--jvp-text', '--jvp-hover-strong'], ['--jvp-muted', '--jvp-hover-strong'], ['--jvp-accent-text', '--jvp-accent-soft'], ['--jvp-text', '--jvp-accent-soft']];
+      for (const [fg, bg] of pairs) expect({ pair: `${fg} on ${bg}`, ratio: +contrastRatio(v[fg!]!, v[bg!]!).toFixed(2) }).toMatchObject({ ratio: expect.toSatisfy((r: number) => r >= 4.5) });
+    });
   });
 }

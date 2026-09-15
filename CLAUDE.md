@@ -8,7 +8,8 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 ## Architecture
 - **entrypoints/content.ts** — Content script on all pages at `document_start`. On an ordinary page it exits after one `document.contentType` comparison (no storage read, no DOM access). For JSON-like types it hides the raw body, reads settings, and at DOMContentLoaded hands the body text to `lib/`.
 - **entrypoints/background.ts** — Service worker for extension lifecycle (sets defaults on install).
-- **entrypoints/popup/** — Browser action popup with enable/disable toggle and theme selector (merges into stored settings; never overwrites fields it does not show).
+- **entrypoints/popup/** — Browser action popup: tab status (asks the active tab with `tabs.sendMessage`; only a tab that rendered registers a listener — no `tabs` permission needed), enable toggle, theme, *Open the viewer*, shortcuts and settings links. Merges into stored settings; never overwrites fields it does not show.
+- **entrypoints/welcome/** — First-run page opened by `background.ts` on install: a live sample in `mountViewer({ host })`, the shortcuts, and exact steps for allowing file URLs (extension pages cannot open `chrome://extensions` themselves).
 - **entrypoints/viewer/** — The extension's own viewer page (`viewer.html`, linked from the popup): paste/open/drop JSON, JSONC or NDJSON, live validation with the error line marked, Format/Minify, then `mountViewer(doc, { host, appearance: false })`. Files over 2 MB skip the textarea.
 - **scripts/** — `privacy-scan.mjs` (rules: network APIs, remote addresses, code from strings, manifest over-reach; unit-tested in `tests/privacy.test.ts`) and `check-privacy.mjs` (the CI step over both builds, with its commented `ALLOW` list).
 - **entrypoints/options/** — Options page: theme, font, text size, indentation, initial expansion, image previews. Saves on every change; no Save button.
@@ -20,8 +21,9 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
   - `search.ts` — time-sliceable search over the parsed value, match paths, the filter predicate; `resultFromPaths`/`matchLookup` turn JSONPath matches into the same result shape
   - `jsonpath.ts` — the JSONPath subset: hand-written parser and evaluator (no `eval`/`Function`), positioned errors, match limit
   - `tabular.ts` — table view logic: `isTabular`, column union, cell previews, exact sorting
+  - `status.ts` — what the popup says about a tab (`tabStatus`, `describeTabStatus`)
   - `serialize.ts`, `raw.ts`, `format.ts` (incl. timestamp/colour/image detection, download names), `settings.ts`, `shortcuts.ts` (global keys and the tree keymap), `contrast.ts` — small helpers
-- **lib/** DOM modules: `view.ts` (row rendering, full vs virtual layout, selection, keyboard, ARIA, image preview), `viewer.ts` (header with toolbar/path bar/notices, search wiring, menus, levels, sort, live settings, error and empty states), `rawview.ts` (raw body with lazy line numbering), `table.ts` (virtualised table in its own scroll box), `menu.ts` (popover menu), `dom.ts` (stylesheet injection, clipboard), `viewer.css`.
+- **lib/** DOM modules: `view.ts` (row rendering, full vs virtual layout, selection, keyboard, ARIA, image preview), `viewer.ts` (header with toolbar/path bar/notices, search wiring, menus, levels, sort, live settings, error and empty states), `rawview.ts` (raw body with lazy line numbering), `table.ts` (virtualised table in its own scroll box), `menu.ts` (popover menu), `icons.ts` (inline SVG line icons, built with DOM APIs so no CSP blocks them), `dom.ts` (stylesheet injection, clipboard), `viewer.css`.
 - **public/icon-{16,48,128}.png** — Extension icons.
 
 ## Key Implementation Details
@@ -47,6 +49,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **No web-accessible resources**: `viewer.css` is imported as a string (`?inline`) and adopted as a constructable stylesheet — pages cannot probe for the extension, and a response's CSP (`default-src 'none'`, `sandbox`) does not block the styles.
 - **Privacy is a CI gate**: `node scripts/check-privacy.mjs .output/chrome-mv3 .output/firefox-mv2` runs after both builds. Anything it flags either comes out of the code or goes into `ALLOW` with a reason, in review. Vite's module-preload polyfill is switched off in `wxt.config.ts` because it calls `fetch`.
 - **Mounting more than once** (the viewer page): `mountViewer` returns `destroy()`, which aborts an `AbortSignal` passed to every listener added outside the viewer's own elements (document keydown, window scroll/resize, the theme media query), disconnects observers and closes menus. Add new global listeners with `{ signal: ctx.signal }`.
+- **Toolbar buttons** are `button(label, title, icon, optionalLabel)` in `lib/viewer.ts`: an inline SVG icon (`lib/icons.ts`) plus a label. Secondary labels (`optionalLabel`) hide below 1100 px, all icon-button labels below 960 px; the aria-label keeps the name. Change a label with `setButton`, never `textContent`, or the icon is lost.
 - Uses `browser.*` API (WXT polyfill) — works in both Chrome and Firefox
 - Themes stored in `browser.storage.sync`.
 

@@ -1,6 +1,7 @@
 import { analyze, classifyContentType, mightBeJson, type ContentClass } from '../lib/document';
 import { addStyleSheet } from '../lib/dom';
 import { normalizeSettings, type Settings } from '../lib/settings';
+import { tabStatus } from '../lib/status';
 import { mountViewer } from '../lib/viewer';
 
 export default defineContentScript({
@@ -72,7 +73,14 @@ function start(cls: ContentClass): void {
       if (!settings.enabled) return;
       const doc = analyze(source.full(), cls);
       if (!doc) return;
-      const viewer = mountViewer(doc, { settings, contentType: document.contentType, byteSize: bodyBytes(), url: location.href });
+      const bytes = bodyBytes();
+      const viewer = mountViewer(doc, { settings, contentType: document.contentType, byteSize: bytes, url: location.href });
+      // The popup asks whether this tab is being shown as JSON. Only a tab that
+      // rendered registers this listener, so ordinary pages carry none.
+      const status = tabStatus(doc, bytes ?? source.full().length);
+      browser.runtime.onMessage.addListener((message: unknown, _sender: unknown, sendResponse: (response: unknown) => void) => {
+        if ((message as { type?: unknown } | null)?.type === 'jvp-status') sendResponse(status);
+      });
       // A change made in the popup or options page applies here at once: no reload, no tab juggling.
       browser.storage.onChanged.addListener((changes, area) => {
         if (area === 'sync' && changes.settings) viewer.applySettings(normalizeSettings(changes.settings.newValue));

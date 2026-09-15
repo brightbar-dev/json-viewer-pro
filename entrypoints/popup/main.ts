@@ -1,4 +1,5 @@
 import { normalizeSettings } from '../../lib/settings';
+import { describeTabStatus, type TabStatus } from '../../lib/status';
 
 const enabledCheckbox = document.getElementById('enabled') as HTMLInputElement;
 const themeSelect = document.getElementById('theme') as HTMLSelectElement;
@@ -23,3 +24,23 @@ document.getElementById('options-link')!.addEventListener('click', (e) => {
   e.preventDefault();
   browser.runtime.openOptionsPage();
 });
+
+// Is the current tab being shown as JSON? Ask it: a tab that rendered answers,
+// any other tab has no listener and the message fails. Needs no `tabs` permission.
+const statusEl = document.getElementById('tab-status')!;
+async function showTabStatus(): Promise<void> {
+  const settings = normalizeSettings((await browser.storage.sync.get('settings')).settings);
+  let status: TabStatus | null = null;
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id !== undefined) status = ((await browser.tabs.sendMessage(tab.id, { type: 'jvp-status' })) as TabStatus | undefined) ?? null;
+  } catch {
+    status = null;
+  }
+  const { tone, text } = describeTabStatus(status, settings.enabled);
+  statusEl.textContent = text;
+  statusEl.className = `tab-status ${tone}`;
+}
+void showTabStatus();
+
+document.getElementById('version')!.textContent = `v${browser.runtime.getManifest().version}`;
