@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# cws-publish.sh - upload the built Chrome zip to this extension's Chrome Web Store item and,
+# unless CWS_AUTO_PUBLISH=false, submit it for review.
+#
+# Uses the Chrome Web Store API v2. The v1.1 API this replaces stops being supported on
+# 2026-10-15 (https://developer.chrome.com/docs/webstore/api/v1). v2 cannot create items or change
+# their visibility; both stay in the Developer Dashboard.
+#
+# Called by .github/workflows/release.yml. tests/cws-publish.test.mjs runs it against a stub curl,
+# because nothing else exercises the release path until a release is actually cut.
+#
+# Env
+#   CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN   OAuth credentials (org Actions secrets)
+#   CWS_PUBLISHER_ID, CWS_ITEM_ID                          the store item
+#   CWS_AUTO_PUBLISH        "false": upload to the item's draft only, do not submit for review
+#   CWS_ZIP                 the package (default: the single .output/*-chrome.zip)
+#   CWS_POLL_SECONDS        wait between upload-status polls (default 5)
+#   CWS_POLL_MAX            upload-status polls before giving up (default 24)
+#   CWS_API_BASE, CWS_TOKEN_URL   test seams; the defaults are Google's
+set -euo pipefail
+
+api_base="${CWS_API_BASE:-https://chromewebstore.googleapis.com}"
+token_url="${CWS_TOKEN_URL:-https://oauth2.googleapis.com/token}"
+item="publishers/${CWS_PUBLISHER_ID:?CWS_PUBLISHER_ID is required}/items/${CWS_ITEM_ID:?CWS_ITEM_ID is required}"
+
+fail() { echo "cws-publish: $*" >&2; exit 1; }
+
+# The API's own message when the body is a Google error, else the first 300 characters of the body.
+describe() {
+  local msg
+  msg=$(jq -r '.error.message // empty' <<<"$1" 2>/dev/null || true)
+  [ -n "$msg" ] || msg=$(printf '%s' "$1" | head -c 300)
+  printf '%s' "$msg"
+}
+
+# call <curl args>: sets BODY and CODE. -w appends the status code on a line of its own.
+call() {
+  local out
+  out=$(curl -sS -w $'\n%{http_code}' "$@") || fail "curl failed"
+  CODE=${out##*$'\n'}
+  BODY=${out%$'\n'*}
+}
+
+# 1. An access token from the refresh token. Only the error fields are ever printed.
+call -X POST "$token_url" \
+  -d "client_id=${CWS_CLIENT_ID:?CWS_CLIENT_ID is required}" \
+  -d "client_secret=${CWS_CLIENT_SECRET:?CWS_CLIENT_SECRET is required}" \
+  -d "refresh_token=${CWS_REFRESH_TOKEN:?CWS_REFRESH_TOKEN is required}" \
+  -d "grant_type=refresh_token"
+token=$(jq -r '.access_token // empty' <<<"$BODY" 2>/dev/null || true)
+if [ "$CODE" != 200 ] || [ -z "$token" ]; then
+  fail "no access token (HTTP $CODE): $(jq -c '{error, error_description}' <<<"$BODY" 2>/dev/null || echo unparseable)"
+fi
+auth=(-H "Authorization: Bearer $token")
+
+# 2. The package.
+zip="${CWS_ZIP:-}"
+if [ -z "$zip" ]; then
+  shopt -s nullglob
+  zips=(.output/*-chrome.zip)
+  [ "${#zips[@]}" -eq 1 ] || fail "expected exactly one .output/*-chrome.zip, found ${#zips[@]}"
+  zip=${zips[0]}
+fi
+[ -f "$zip" ] || fail "no such package: $zip"
+
+# 3. Upload it to the item's draft.
+call -X POST "$api_base/upload/v2/$item:upload" "${auth[@]}" -T "$zip"
+[ "$CODE" = 200 ] || fail "upload rejected (HTTP $CODE): $(describe "$BODY")"
+state=$(jq -r '.uploadState // "MISSING"' <<<"$BODY")
+version=$(jq -r '.crxVersion // "unknown"' <<<"$BODY")
+
+# A large package is processed asynchronously; fetchStatus reports how that ended.
+polls=0
+while [ "$state" = IN_PROGRESS ] || [ "$state" = UPLOAD_IN_PROGRESS ]; do
+  polls=$((polls + 1))
+  [ "$polls" -le "${CWS_POLL_MAX:-24}" ] || fail "upload still in progress after $((polls - 1)) polls"
+  sleep "${CWS_POLL_SECONDS:-5}"
+  call "$api_base/v2/$item:fetchStatus" "${auth[@]}"
+  [ "$CODE" = 200 ] || fail "fetchStatus failed (HTTP $CODE): $(describe "$BODY")"
+  state=$(jq -r '.lastAsyncUploadState // "MISSING"' <<<"$BODY")
+done
+[ "$state" = SUCCEEDED ] || fail "upload did not succeed: $state (crxVersion $version)"
+echo "Upload: $state (crxVersion $version)"
+
+if [ "${CWS_AUTO_PUBLISH:-}" = false ]; then
+  echo "CWS_AUTO_PUBLISH=false: package uploaded to the item draft, NOT submitted for review."
+  echo "Submit it later from the dashboard or with the CWS API publish call (brightbar-dev/org-work RUNBOOK.md)."
+  exit 0
+fi
+
+# 4. Submit for review. DEFAULT_PUBLISH publishes once the review passes, as v1.1 always did.
+call -X POST "$api_base/v2/$item:publish" "${auth[@]}" \
+  -H 'Content-Type: application/json' -d '{"publishType":"DEFAULT_PUBLISH"}'
+[ "$CODE" = 200 ] || fail "publish rejected (HTTP $CODE): $(describe "$BODY")"
+pstate=$(jq -r '.state // "MISSING"' <<<"$BODY")
+case "$pstate" in
+  PENDING_REVIEW | STAGED | PUBLISHED | PUBLISHED_TO_TESTERS) ;;
+  *) fail "publish not accepted: state $pstate (crxVersion $version)" ;;
+esac
+echo "Publish: $pstate (crxVersion $version)"
+jq -r '(.warningInfo.warnings // [])[] | "warning: " + tostring' <<<"$BODY" 2>/dev/null || true
+
+# 5. Read the submission back. Informational; the accepted publish above is what decides success.
+call "$api_base/v2/$item:fetchStatus" "${auth[@]}"
+if [ "$CODE" = 200 ]; then
+  echo "Status: $(jq -c '{submitted: .submittedItemRevisionStatus, published: .publishedItemRevisionStatus}' <<<"$BODY")"
+fi

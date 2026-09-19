@@ -79,6 +79,7 @@ npm test
 ## Conventions
 - WXT framework with vanilla TypeScript (no UI framework)
 - Version: semver, 0.2.x (WXT rewrite), 1.x = production-ready
+- Release: merging the release-please PR runs `.github/workflows/release.yml`, which builds both zips and calls `scripts/cws-publish.sh` (Chrome Web Store API v2, the only API that works after 2026-10-15; `CWS_AUTO_PUBLISH=false` uploads to the draft without submitting). `tests/cws-publish.test.mjs` runs that script against a stub `curl`, because nothing else exercises the release path before a release is cut. Change the script, run the test.
 - All user-facing strings in HTML, not TS
 - Privacy policy must be kept current with any permission changes
 - Do NOT add Claude/AI as co-author or contributor in commits, PRs, or code
