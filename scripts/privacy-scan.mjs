@@ -1,5 +1,5 @@
 /**
- * JSON Viewer Pro promises that it never sends anything anywhere and never
+ * Brightbar JSON Viewer promises that it never sends anything anywhere and never
  * runs code it did not ship. This scans a built extension for every way its
  * code could break that promise, and checks the manifest asks for nothing more
  * than it needs. Pure: scripts/check-privacy.mjs runs it in CI over the build,

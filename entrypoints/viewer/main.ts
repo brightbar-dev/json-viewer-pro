@@ -29,7 +29,7 @@ const GUTTER_LIMIT = 100_000;
 
 const EXAMPLE = `{
   "id": 149883901923910003,
-  "name": "JSON Viewer Pro",
+  "name": "Brightbar JSON Viewer",
   "released": "2026-09-15T08:00:00Z",
   "updatedAt": 1757923200,
   // Comments are fine in this box: it accepts JSONC.
