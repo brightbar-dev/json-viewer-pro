@@ -8,9 +8,11 @@ import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { generateKeyPairSync, createVerify } from 'node:crypto';
 import { join, resolve } from 'node:path';
+import { verifyCrx } from '../scripts/crx3.mjs';
 
 const SCRIPT = resolve(__dirname, '../scripts/cws-publish.sh');
 const RELEASE_YML = resolve(__dirname, '../.github/workflows/release.yml');
+const CRX_PUBLIC_KEY = resolve(__dirname, '../store/cws-crx-public-key.pub');
 const PUB = '11844dd1-bc05-433e-99d0-613f8fd461a2';
 const ITEM = 'abcdefghijklmnopabcdefghijklmnop';
 const SECRET = 'CLIENT-SECRET-VALUE-XYZ';
@@ -30,6 +32,8 @@ const i = routes.findIndex((r) => url.includes(r.match));
 fs.appendFileSync(process.env.STUB_LOG, JSON.stringify({
   url, method,
   upload: args.includes('-T'),
+  file: args.includes('-T') ? args[args.indexOf('-T') + 1] : undefined,
+  headers: args.filter((a, n) => args[n - 1] === '-H' && !a.startsWith('Authorization')),
   bearer: args.some((a) => a === 'Authorization: Bearer tok'),
   body: args.includes('-d') ? args[args.indexOf('-d') + 1] : undefined,
 }) + '\\n');
@@ -50,14 +54,20 @@ const routes = {
 };
 
 let dir;
-function run(overrides = {}, { env = {}, withZip = true } = {}) {
+function run(overrides = {}, { env = {}, withZip = true, publicKey } = {}) {
   const table = { ...routes, ...overrides };
   writeFileSync(join(dir, 'routes.json'), JSON.stringify(Object.values(table)));
   rmSync(join(dir, 'state.json'), { force: true });
   rmSync(join(dir, 'calls.log'), { force: true });
   if (withZip) {
     mkdirSync(join(dir, 'work/.output'), { recursive: true });
-    writeFileSync(join(dir, 'work/.output/ext-1.2.3-chrome.zip'), 'zip bytes');
+    // Starts with a zip local-file-header signature, which is all the CRX verifier checks of it.
+    writeFileSync(join(dir, 'work/.output/ext-1.2.3-chrome.zip'), Buffer.from('PK\x03\x04 zip bytes', 'latin1'));
+  }
+  rmSync(join(dir, 'work/store'), { recursive: true, force: true });
+  if (publicKey) {
+    mkdirSync(join(dir, 'work/store'), { recursive: true });
+    writeFileSync(join(dir, 'work/store/cws-crx-public-key.pub'), publicKey);
   }
   const r = spawnSync('bash', [SCRIPT], {
     cwd: join(dir, 'work'),
@@ -203,11 +213,19 @@ describe('cws-publish.sh', () => {
     expect(r.out).not.toContain('Bearer');
   });
 
-  it('fails before uploading when there is no package', () => {
+  it('fails before calling anything when there is no package', () => {
     const r = run({}, { withZip: false });
     expect(r.status).not.toBe(0);
     expect(r.out).toContain('expected exactly one .output/*-chrome.zip');
-    expect(r.log.map((c) => c.url)).toEqual(['https://oauth2.googleapis.com/token']);
+    expect(r.log).toHaveLength(0);
+  });
+
+  it('uploads the zip as it is when the item takes unsigned uploads (no public key, no CWS_CRX_KEY)', () => {
+    const r = run();
+    expect(r.status, r.out).toBe(0);
+    const upload = r.log.find((c) => c.upload);
+    expect(upload.file).toBe('.output/ext-1.2.3-chrome.zip');
+    expect(upload.headers.some((h) => h.startsWith('X-Goog-Upload'))).toBe(false);
   });
 
   it('requires the item to be named', () => {
@@ -272,6 +290,78 @@ describe('cws-publish.sh with a service account (CWS_SA_KEY)', () => {
   });
 });
 
+describe('cws-publish.sh with Verified CRX Uploads (CWS_CRX_KEY)', () => {
+  const pair = () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    return {
+      key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      pub: publicKey.export({ type: 'spki', format: 'pem' }),
+    };
+  };
+  const signer = pair();
+  const stranger = pair();
+
+  it('signs the zip into a CRX3, checks it against the registered key, and uploads the CRX raw', () => {
+    const r = run({}, { env: { CWS_CRX_KEY: signer.key }, publicKey: signer.pub });
+    expect(r.status, r.out).toBe(0);
+    const upload = r.log.find((c) => c.upload);
+    expect(upload.file).toBe('.output/ext-1.2.3-chrome.crx');
+    expect(upload.headers).toEqual(['X-Goog-Upload-Protocol: raw', 'X-Goog-Upload-File-Name: ext-1.2.3-chrome.crx']);
+    const crx = readFileSync(join(dir, 'work/.output/ext-1.2.3-chrome.crx'));
+    expect(verifyCrx(crx, signer.pub).proofs).toBe(1);
+    expect(() => verifyCrx(crx, stranger.pub)).toThrow('not signed by the expected public key');
+    expect(r.stdout).toMatch(/Signed: \.output\/ext-1\.2\.3-chrome\.crx/);
+    expect(r.log.some((c) => c.url.endsWith(':publish'))).toBe(true);
+  });
+
+  it('refuses to upload an unsigned zip once the item has a registered public key', () => {
+    const r = run({}, { publicKey: signer.pub });
+    expect(r.status).not.toBe(0);
+    expect(r.out).toContain('CWS_CRX_KEY is not set');
+    expect(r.log).toHaveLength(0);
+  });
+
+  it('refuses a CRX signed by any other key, before calling anything, and never prints the key', () => {
+    const r = run({}, { env: { CWS_CRX_KEY: stranger.key }, publicKey: signer.pub });
+    expect(r.status).not.toBe(0);
+    expect(r.out).toContain('not signed by the registered key');
+    expect(r.out).not.toContain('PRIVATE KEY');
+    expect(r.out).not.toContain(stranger.key.split('\n')[1]);
+    expect(r.log).toHaveLength(0);
+  });
+
+  it('fails, calling nothing, when CWS_CRX_KEY is not a key', () => {
+    const r = run({}, { env: { CWS_CRX_KEY: 'not a key' }, publicKey: signer.pub });
+    expect(r.status).not.toBe(0);
+    expect(r.out).toContain('could not sign the package');
+    expect(r.log).toHaveLength(0);
+  });
+
+  it('with CWS_BUILD_ONLY=true builds and verifies the CRX and touches no network or credential', () => {
+    const r = run({}, {
+      env: { CWS_CRX_KEY: signer.key, CWS_BUILD_ONLY: 'true', CWS_CLIENT_ID: '', CWS_CLIENT_SECRET: '', CWS_REFRESH_TOKEN: '' },
+      publicKey: signer.pub,
+    });
+    expect(r.status, r.out).toBe(0);
+    expect(r.log).toHaveLength(0);
+    expect(r.stdout).toContain('CWS_BUILD_ONLY=true');
+    expect(verifyCrx(readFileSync(join(dir, 'work/.output/ext-1.2.3-chrome.crx')), signer.pub).proofs).toBe(1);
+  });
+});
+
+describe('the registered CRX public key', () => {
+  // The key registered in the dashboard's Verified CRX Uploads section for all four Brightbar
+  // items (2026-09-23). The private half is vault:brightbar-cws-crx-signing-key#notes and the
+  // org Actions secret CWS_CRX_KEY. A different file here means the next release is refused.
+  it('is the brightbar publisher key', async () => {
+    const { createPublicKey, createHash } = await import('node:crypto');
+    const spki = createPublicKey(readFileSync(CRX_PUBLIC_KEY)).export({ type: 'spki', format: 'der' });
+    expect(createHash('sha256').update(spki).digest('hex')).toBe(
+      '7cc41f58481e44147a5b9d759eb1722cdcd1c2149fe7d40ef697faf931f96205',
+    );
+  });
+});
+
 describe('release workflow', () => {
   const yml = readFileSync(RELEASE_YML, 'utf8');
 
@@ -289,5 +379,9 @@ describe('release workflow', () => {
 
   it('passes the service-account key, so releases publish as Claw rather than as Ken', () => {
     expect(yml).toContain('CWS_SA_KEY: ${{ secrets.CWS_SA_KEY }}');
+  });
+
+  it('passes the CRX signing key, because the store refuses unsigned uploads for this item', () => {
+    expect(yml).toContain('CWS_CRX_KEY: ${{ secrets.CWS_CRX_KEY }}');
   });
 });

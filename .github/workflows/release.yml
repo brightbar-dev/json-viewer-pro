@@ -51,6 +51,7 @@ jobs:
       - name: Publish to Chrome Web Store
         env:
           CWS_SA_KEY: ${{ secrets.CWS_SA_KEY }}
+          CWS_CRX_KEY: ${{ secrets.CWS_CRX_KEY }}
           CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
           CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
           CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}

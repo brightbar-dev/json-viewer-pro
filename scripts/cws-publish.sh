@@ -19,6 +19,15 @@
 #   CWS_PUBLISHER_ID, CWS_ITEM_ID                          the store item
 #   CWS_AUTO_PUBLISH        "false": upload to the item's draft only, do not submit for review
 #   CWS_ZIP                 the package (default: the single .output/*-chrome.zip)
+#   CWS_CRX_KEY             the PEM private key this item's uploads are signed with (org Actions
+#                           secret; vault:brightbar-cws-crx-signing-key#notes). The item is opted in
+#                           to Verified CRX Uploads, so the store refuses an unsigned zip: the zip is
+#                           packed into a CRX3 by scripts/crx3.mjs and the CRX is uploaded instead
+#   CWS_CRX_PUBLIC_KEY      the public key registered in the dashboard (default
+#                           store/cws-crx-public-key.pub). While that file exists the script refuses
+#                           to run without CWS_CRX_KEY, and refuses a CRX this key did not sign
+#   CWS_BUILD_ONLY          "true": build and verify the package, then stop. No network, no credential
+#                           beyond CWS_CRX_KEY. The dry run of the signed path
 #   CWS_POLL_SECONDS        wait between upload-status polls (default 5)
 #   CWS_POLL_MAX            upload-status polls before giving up (default 24)
 #   CWS_API_BASE, CWS_TOKEN_URL   test seams; the defaults are Google's
@@ -46,7 +55,48 @@ call() {
   BODY=${out%$'\n'*}
 }
 
-# 1. An access token: the service account when CWS_SA_KEY is set, else the refresh token. Only
+# 1. The package: the release zip, signed into a CRX when the item is opted in to Verified CRX
+#    Uploads. Built and checked before any credential is used, so a signing problem costs nothing.
+zip="${CWS_ZIP:-}"
+if [ -z "$zip" ]; then
+  shopt -s nullglob
+  zips=(.output/*-chrome.zip)
+  [ "${#zips[@]}" -eq 1 ] || fail "expected exactly one .output/*-chrome.zip, found ${#zips[@]}"
+  zip=${zips[0]}
+fi
+[ -f "$zip" ] || fail "no such package: $zip"
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+pubkey="${CWS_CRX_PUBLIC_KEY:-store/cws-crx-public-key.pub}"
+package=$zip
+upload_headers=()
+if [ -n "${CWS_CRX_KEY:-}" ]; then
+  crx="${zip%.zip}.crx"
+  crxkey=$(mktemp)
+  chmod 600 "$crxkey"
+  printf '%s\n' "$CWS_CRX_KEY" >"$crxkey"
+  packed=$(node "$here/crx3.mjs" pack "$zip" "$crxkey" "$crx" 2>&1) || packed="FAILED: $packed"
+  rm -f "$crxkey"
+  case "$packed" in FAILED:*) fail "could not sign the package: ${packed#FAILED: }" ;; esac
+  if [ -f "$pubkey" ]; then
+    verified=$(node "$here/crx3.mjs" verify "$crx" "$pubkey" 2>&1) \
+      || fail "the CRX is not signed by the registered key $pubkey: $verified"
+  else
+    verified=$(node "$here/crx3.mjs" verify "$crx" 2>&1) || fail "the CRX does not verify: $verified"
+  fi
+  echo "Signed: $crx $(jq -c '{crxId, signerSpkiSha256, expectedKeyMatched}' <<<"$verified")"
+  package=$crx
+  upload_headers=(-H 'X-Goog-Upload-Protocol: raw' -H "X-Goog-Upload-File-Name: $(basename "$crx")")
+elif [ -f "$pubkey" ]; then
+  fail "CWS_CRX_KEY is not set, but $pubkey says this item takes only signed uploads; the store would refuse the zip"
+fi
+
+if [ "${CWS_BUILD_ONLY:-}" = true ]; then
+  echo "CWS_BUILD_ONLY=true: built $package, uploaded nothing."
+  exit 0
+fi
+
+# 2. An access token: the service account when CWS_SA_KEY is set, else the refresh token. Only
 #    the error fields are ever printed. No fallback between them: a refused service account fails
 #    the release loudly rather than quietly publishing as Ken.
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
@@ -81,18 +131,8 @@ fi
 echo "Auth: $via"
 auth=(-H "Authorization: Bearer $token")
 
-# 2. The package.
-zip="${CWS_ZIP:-}"
-if [ -z "$zip" ]; then
-  shopt -s nullglob
-  zips=(.output/*-chrome.zip)
-  [ "${#zips[@]}" -eq 1 ] || fail "expected exactly one .output/*-chrome.zip, found ${#zips[@]}"
-  zip=${zips[0]}
-fi
-[ -f "$zip" ] || fail "no such package: $zip"
-
 # 3. Upload it to the item's draft.
-call -X POST "$api_base/upload/v2/$item:upload" "${auth[@]}" -T "$zip"
+call -X POST "$api_base/upload/v2/$item:upload" "${auth[@]}" ${upload_headers[@]+"${upload_headers[@]}"} -T "$package"
 [ "$CODE" = 200 ] || fail "upload rejected (HTTP $CODE): $(describe "$BODY")"
 state=$(jq -r '.uploadState // "MISSING"' <<<"$BODY")
 version=$(jq -r '.crxVersion // "unknown"' <<<"$BODY")
