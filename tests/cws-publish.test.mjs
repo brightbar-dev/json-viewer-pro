@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { generateKeyPairSync, createVerify } from 'node:crypto';
 import { join, resolve } from 'node:path';
 
 const SCRIPT = resolve(__dirname, '../scripts/cws-publish.sh');
@@ -188,7 +189,7 @@ describe('cws-publish.sh', () => {
       token: { match: 'oauth2.googleapis.com/token', responses: [ok({ error: 'invalid_grant', error_description: 'Bad Request' }, 400)] },
     });
     expect(r.status).not.toBe(0);
-    expect(r.out).toContain('no access token (HTTP 400)');
+    expect(r.out).toContain('no access token (HTTP 400, via refresh token)');
     expect(r.out).toContain('invalid_grant');
     expect(r.out).not.toContain(SECRET);
     expect(r.out).not.toContain(REFRESH);
@@ -216,6 +217,61 @@ describe('cws-publish.sh', () => {
   });
 });
 
+describe('cws-publish.sh with a service account (CWS_SA_KEY)', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const PEM = privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const SA_KEY = JSON.stringify({ type: 'service_account', client_email: 'sa@test.iam.gserviceaccount.com', private_key: PEM });
+  const b64url = (s) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+
+  it('mints the token from a signed JWT, never touches the refresh token, and says which identity it used', () => {
+    const r = run({}, { env: { CWS_SA_KEY: SA_KEY } });
+    expect(r.status, r.out).toBe(0);
+    const [token, upload] = r.log;
+    expect(token.url).toBe('https://oauth2.googleapis.com/token');
+    expect(token.body).toMatch(/^grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=/);
+    expect(token.body).not.toContain('refresh_token');
+    expect(upload.bearer).toBe(true);
+    expect(r.stdout).toContain('Auth: service account sa@test.iam.gserviceaccount.com');
+
+    const [head, claims, sig] = token.body.split('assertion=')[1].split('.');
+    expect(JSON.parse(b64url(head))).toEqual({ alg: 'RS256', typ: 'JWT' });
+    const c = JSON.parse(b64url(claims));
+    expect(c).toMatchObject({
+      iss: 'sa@test.iam.gserviceaccount.com',
+      scope: 'https://www.googleapis.com/auth/chromewebstore',
+      aud: 'https://oauth2.googleapis.com/token',
+    });
+    expect(c.exp - c.iat).toBe(3600);
+    const v = createVerify('RSA-SHA256');
+    v.update(`${head}.${claims}`);
+    expect(v.verify(publicKey, b64url(sig))).toBe(true);
+  });
+
+  it('works with no OAuth secrets at all', () => {
+    const r = run({}, { env: { CWS_SA_KEY: SA_KEY, CWS_CLIENT_ID: '', CWS_CLIENT_SECRET: '', CWS_REFRESH_TOKEN: '' } });
+    expect(r.status, r.out).toBe(0);
+  });
+
+  it('never prints the private key, even when the token exchange fails', () => {
+    const r = run(
+      { token: { match: 'oauth2.googleapis.com/token', responses: [ok({ error: 'invalid_grant', error_description: 'Invalid JWT Signature.' }, 400)] } },
+      { env: { CWS_SA_KEY: SA_KEY } },
+    );
+    expect(r.status).not.toBe(0);
+    expect(r.out).toContain('no access token (HTTP 400, via service account sa@test.iam.gserviceaccount.com)');
+    expect(r.out).not.toContain('PRIVATE KEY');
+    expect(r.out).not.toContain(PEM.split('\n')[1]);
+    expect(r.log).toHaveLength(1);
+  });
+
+  it('refuses a CWS_SA_KEY that is not a service-account key, before calling anything', () => {
+    const r = run({}, { env: { CWS_SA_KEY: 'not json' } });
+    expect(r.status).not.toBe(0);
+    expect(r.out).toContain('CWS_SA_KEY is not a service-account JSON key');
+    expect(r.log).toHaveLength(0);
+  });
+});
+
 describe('release workflow', () => {
   const yml = readFileSync(RELEASE_YML, 'utf8');
 
@@ -229,5 +285,9 @@ describe('release workflow', () => {
     expect(yml).toContain(`CWS_PUBLISHER_ID: ${PUB}`);
     expect(yml).toMatch(/CWS_ITEM_ID: [a-p]{32}\b/);
     expect(yml).toContain('CWS_AUTO_PUBLISH: ${{ vars.CWS_AUTO_PUBLISH }}');
+  });
+
+  it('passes the service-account key, so releases publish as Claw rather than as Ken', () => {
+    expect(yml).toContain('CWS_SA_KEY: ${{ secrets.CWS_SA_KEY }}');
   });
 });
