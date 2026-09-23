@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CI guard for JSON Viewer Pro's privacy promise: fail if the built extension
+ * CI guard for Brightbar JSON Viewer's privacy promise: fail if the built extension
  * could send data anywhere or run code it did not ship, or if its manifest asks
  * for more than the storage permission.
  *

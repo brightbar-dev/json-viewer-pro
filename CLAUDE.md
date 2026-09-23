@@ -1,4 +1,4 @@
-# JSON Viewer Pro — Browser Extension
+# Brightbar JSON Viewer — Browser Extension
 
 ## What This Is
 A browser extension that auto-detects JSON responses and renders them as an interactive tree view with search, syntax highlighting, and theme support. Privacy-first: no tracking, no ads, no donation popups.

@@ -1,4 +1,4 @@
-# JSON Viewer Pro
+# Brightbar JSON Viewer
 
 Clean, fast JSON viewer for Chrome. Automatically detects and formats JSON responses with a collapsible tree view, search, and syntax highlighting. No ads, no tracking, no donation popups.
 
@@ -65,7 +65,7 @@ the tree to each match.
 ## Installation
 
 ### From Chrome Web Store
-[Install JSON Viewer Pro](https://chromewebstore.google.com/detail/json-viewer-pro/iodhhjpjemdfmmfffmejfnbbjbfafoac) — free, no account required.
+[Install Brightbar JSON Viewer](https://chromewebstore.google.com/detail/json-viewer-pro/iodhhjpjemdfmmfffmejfnbbjbfafoac) — free, no account required.
 
 ### From GitHub Release
 1. Download the latest `json-viewer-pro.zip` from [Releases](https://github.com/brightbar-dev/json-viewer-pro/releases)
@@ -154,14 +154,14 @@ The rules are unit-tested in `tests/privacy.test.ts`.
 > listing text and images in the Chrome Web Store dashboard is a manual step.
 
 ### Title
-JSON Viewer Pro - Formatter, Beautifier & API Response Viewer
+Brightbar JSON Viewer - Formatter, Beautifier & API Response Viewer
 
 ### Short Description
 JSON viewer and formatter: fast tree view for huge files, dark mode, JSONPath search, exact big numbers. No tracking. Open source.
 
 ### Detailed Description
 ```text
-JSON Viewer Pro turns any JSON response into a fast, readable tree. It is a JSON formatter and viewer that stays quick on huge files, keeps big numbers exact, and never tracks you. Free, with no account.
+Brightbar JSON Viewer turns any JSON response into a fast, readable tree. It is a JSON formatter and viewer that stays quick on huge files, keeps big numbers exact, and never tracks you. Free, with no account.
 
 TREE VIEW AND FORMATTER
 - Formats JSON automatically: application/json, the +json types, and JSON sent as text/plain or JavaScript (JSONP included)
