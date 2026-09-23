@@ -10,7 +10,12 @@
 # because nothing else exercises the release path until a release is actually cut.
 #
 # Env
-#   CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN   OAuth credentials (org Actions secrets)
+#   CWS_SA_KEY              service-account JSON (org Actions secret). When set, the token is
+#                           minted as cws-publisher@kendoclaw-cws.iam.gserviceaccount.com, Claw's
+#                           own identity, registered on the publisher 2026-09-23
+#                           (https://developer.chrome.com/docs/webstore/service-accounts)
+#   CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN   the OAuth refresh token Ken minted
+#                           (org Actions secrets); used only when CWS_SA_KEY is unset
 #   CWS_PUBLISHER_ID, CWS_ITEM_ID                          the store item
 #   CWS_AUTO_PUBLISH        "false": upload to the item's draft only, do not submit for review
 #   CWS_ZIP                 the package (default: the single .output/*-chrome.zip)
@@ -41,16 +46,39 @@ call() {
   BODY=${out%$'\n'*}
 }
 
-# 1. An access token from the refresh token. Only the error fields are ever printed.
-call -X POST "$token_url" \
-  -d "client_id=${CWS_CLIENT_ID:?CWS_CLIENT_ID is required}" \
-  -d "client_secret=${CWS_CLIENT_SECRET:?CWS_CLIENT_SECRET is required}" \
-  -d "refresh_token=${CWS_REFRESH_TOKEN:?CWS_REFRESH_TOKEN is required}" \
-  -d "grant_type=refresh_token"
+# 1. An access token: the service account when CWS_SA_KEY is set, else the refresh token. Only
+#    the error fields are ever printed. No fallback between them: a refused service account fails
+#    the release loudly rather than quietly publishing as Ken.
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+if [ -n "${CWS_SA_KEY:-}" ]; then
+  email=$(jq -r '.client_email // empty' <<<"$CWS_SA_KEY" 2>/dev/null || true)
+  [ -n "$email" ] || fail "CWS_SA_KEY is not a service-account JSON key"
+  now=$(date +%s)
+  jwt_head=$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)
+  jwt_claims=$(jq -nc --arg e "$email" --arg a "$token_url" --argjson n "$now" \
+    '{iss:$e, scope:"https://www.googleapis.com/auth/chromewebstore", aud:$a, iat:$n, exp:($n+3600)}' | b64url)
+  keyfile=$(mktemp)
+  chmod 600 "$keyfile"
+  jq -r .private_key <<<"$CWS_SA_KEY" >"$keyfile"
+  jwt_sig=$(printf '%s.%s' "$jwt_head" "$jwt_claims" | openssl dgst -sha256 -sign "$keyfile" | b64url) || jwt_sig=""
+  rm -f "$keyfile"
+  [ -n "$jwt_sig" ] || fail "could not sign the service-account assertion"
+  call -X POST "$token_url" \
+    -d "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=$jwt_head.$jwt_claims.$jwt_sig"
+  via="service account $email"
+else
+  call -X POST "$token_url" \
+    -d "client_id=${CWS_CLIENT_ID:?CWS_CLIENT_ID is required (or set CWS_SA_KEY)}" \
+    -d "client_secret=${CWS_CLIENT_SECRET:?CWS_CLIENT_SECRET is required}" \
+    -d "refresh_token=${CWS_REFRESH_TOKEN:?CWS_REFRESH_TOKEN is required}" \
+    -d "grant_type=refresh_token"
+  via="refresh token"
+fi
 token=$(jq -r '.access_token // empty' <<<"$BODY" 2>/dev/null || true)
 if [ "$CODE" != 200 ] || [ -z "$token" ]; then
-  fail "no access token (HTTP $CODE): $(jq -c '{error, error_description}' <<<"$BODY" 2>/dev/null || echo unparseable)"
+  fail "no access token (HTTP $CODE, via $via): $(jq -c '{error, error_description}' <<<"$BODY" 2>/dev/null || echo unparseable)"
 fi
+echo "Auth: $via"
 auth=(-H "Authorization: Bearer $token")
 
 # 2. The package.
