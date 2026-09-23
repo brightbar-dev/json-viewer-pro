@@ -2,6 +2,13 @@
 
 All notable changes to JSON Viewer Pro will be documented in this file.
 
+## [0.7.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.6.0...json-viewer-pro-v0.7.0) (2026-09-23)
+
+
+### Features
+
+* rename JSON Viewer Pro to Brightbar JSON Viewer ([#22](https://github.com/brightbar-dev/json-viewer-pro/issues/22)) ([3a49ad6](https://github.com/brightbar-dev/json-viewer-pro/commit/3a49ad6e5d50a23aefd94400b121a0fa827ee05a))
+
 ## [0.6.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.5.0...json-viewer-pro-v0.6.0) (2026-09-19)
 
 
