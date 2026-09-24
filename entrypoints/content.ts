@@ -3,6 +3,7 @@ import { addStyleSheet } from '../lib/dom';
 import { normalizeSettings, type Settings } from '../lib/settings';
 import { tabStatus } from '../lib/status';
 import { mountViewer } from '../lib/viewer';
+import { recordDocumentViewed } from '../lib/review-nudge';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -75,6 +76,7 @@ function start(cls: ContentClass): void {
       if (!doc) return;
       const bytes = bodyBytes();
       const viewer = mountViewer(doc, { settings, contentType: document.contentType, byteSize: bytes, url: location.href });
+      if (doc.kind === 'json') void recordDocumentViewed();
       // The popup asks whether this tab is being shown as JSON. Only a tab that
       // rendered registers this listener, so ordinary pages carry none.
       const status = tabStatus(doc, bytes ?? source.full().length);

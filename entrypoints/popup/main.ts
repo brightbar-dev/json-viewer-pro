@@ -1,5 +1,6 @@
 import { normalizeSettings } from '../../lib/settings';
 import { describeTabStatus, type TabStatus } from '../../lib/status';
+import { showReviewNudge } from '../../lib/review-nudge';
 
 const enabledCheckbox = document.getElementById('enabled') as HTMLInputElement;
 const themeSelect = document.getElementById('theme') as HTMLSelectElement;
@@ -44,3 +45,4 @@ async function showTabStatus(): Promise<void> {
 void showTabStatus();
 
 document.getElementById('version')!.textContent = `v${browser.runtime.getManifest().version}`;
+void showReviewNudge(document.getElementById('review-nudge')!);

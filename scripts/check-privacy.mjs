@@ -41,6 +41,14 @@ const ALLOW = [
     match: /^https:\/\/chromewebstore\.google\.com\/detail\/[\w-]+\/[a-p]{32}$/,
     reason: 'store link the user can click in the popup; never fetched',
   },
+  // The popup's one-time review request (lib/review-nudge.ts): this item's own store reviews page
+  // and the GitHub issue forms, both plain <a href> links in the markup. Nothing is loaded from them.
+  {
+    file: /^popup\.html$/,
+    rule: 'remote-url',
+    match: /^(https:\/\/chromewebstore\.google\.com\/detail\/iodhhjpjemdfmmfffmejfnbbjbfafoac\/reviews|https:\/\/github\.com\/brightbar-dev\/json-viewer-pro\/issues\/new\/choose)$/,
+    reason: 'review and feedback links the user can click in the popup; never fetched',
+  },
 ];
 
 const dirs = process.argv.slice(2);
