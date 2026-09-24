@@ -4,6 +4,7 @@ import { formatNumber, formatSize, utf8Length } from '../../lib/format';
 import { stringifyJson } from '../../lib/serialize';
 import { normalizeSettings, type Settings } from '../../lib/settings';
 import { createAppearance, mountViewer, type ViewerController } from '../../lib/viewer';
+import { recordDocumentViewed } from '../../lib/review-nudge';
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const input = byId<HTMLTextAreaElement>('input');
@@ -220,6 +221,7 @@ function showViewer(doc: JsonDoc, source: string): void {
     url: fileName ? `file:///${encodeURIComponent(fileName)}` : undefined,
   });
   window.scrollTo(0, 0);
+  void recordDocumentViewed();
 }
 
 function showEditor(): void {

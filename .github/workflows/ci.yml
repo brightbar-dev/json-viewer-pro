@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   test:
@@ -18,7 +19,10 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+          registry-url: 'https://npm.pkg.github.com'
       - run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npx wxt prepare
       - run: npm test
       # Typecheck. Added 2026-08-26: `wxt build` bundles with esbuild, which
