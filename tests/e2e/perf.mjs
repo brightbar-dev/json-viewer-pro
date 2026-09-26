@@ -2,7 +2,7 @@
 /**
  * Local end-to-end performance check — NOT run in CI (CI has no browser).
  *
- *   npm run build
+ *   pnpm run build
  *   PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs \
  *   CHROME="/path/to/Google Chrome for Testing" \
  *   node tests/e2e/perf.mjs [label=unpacked-dir ...]
@@ -10,7 +10,7 @@
  * With no arguments it measures `.output/chrome-mv3`. Pass several
  * `label=dir` pairs (e.g. `main=/tmp/old-build new=.output/chrome-mv3`) to
  * compare builds. Chrome-branded builds ignore --load-extension, so CHROME must
- * be Chrome for Testing (`npx playwright install chromium` fetches one).
+ * be Chrome for Testing (`pnpm dlx playwright install chromium` fetches one).
  *
  * It writes its own fixtures to a temp directory, serves them with real
  * content types, and prints markdown tables: first render, long tasks, JS heap

@@ -3,7 +3,7 @@
  * Chrome Web Store listing assets, captured from the real built extension in
  * Chrome for Testing.
  *
- *   npx wxt build
+ *   pnpm exec wxt build
  *   PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs \
  *   CHROME="/path/to/Google Chrome for Testing" \
  *   node store/capture/capture.mjs [unpacked-extension-dir]
