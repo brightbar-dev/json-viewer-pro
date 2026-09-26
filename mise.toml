@@ -1,29 +1,30 @@
 [tools]
 node = "22"
+pnpm = "12.6.0"
 
 [tasks.test]
-run = "npm test"
+run = "pnpm test"
 description = "Run Vitest tests"
 
 [tasks.build]
-run = "npx wxt build"
+run = "pnpm exec wxt build"
 description = "Production build (Chrome)"
 
 [tasks."build:firefox"]
-run = "npx wxt build --browser firefox"
+run = "pnpm exec wxt build --browser firefox"
 
 [tasks.dev]
-run = "npx wxt dev"
+run = "pnpm exec wxt dev"
 description = "Dev mode with HMR (Chrome)"
 
 [tasks.setup]
-run = "npm ci && npx wxt prepare"
+run = "pnpm install --frozen-lockfile && pnpm exec wxt prepare"
 description = "Install deps and prepare WXT"
 
 [tasks.zip]
-run = "npx wxt zip"
+run = "pnpm exec wxt zip"
 description = "Build + zip for store submission"
 
 [tasks.ci]
-run = ["npm ci", "npx wxt prepare", "npm test", "npx wxt build"]
+run = ["pnpm install --frozen-lockfile", "pnpm exec wxt prepare", "pnpm test", "pnpm exec wxt build"]
 description = "Full CI pipeline"

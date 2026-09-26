@@ -83,8 +83,8 @@ the tree to each match.
 ## Testing
 
 ```bash
-npm test          # Vitest, one run
-npm run test:watch
+pnpm test          # Vitest, one run
+pnpm run test:watch
 ```
 
 Tests run under Vitest with the WXT testing plugin, in Node with no DOM. The
@@ -102,19 +102,19 @@ and the extension's cost on an ordinary HTML page. CI has no browser, so it is a
 local script:
 
 ```bash
-npm run build
+pnpm run build
 PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs \
 CHROME="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
 node tests/e2e/perf.mjs                      # or: node tests/e2e/perf.mjs main=/path/to/old-build new=.output/chrome-mv3
 ```
 
 Chrome-branded builds ignore `--load-extension`, so it has to be Chrome for
-Testing (`npx playwright install chromium` downloads one).
+Testing (`pnpm dlx playwright install chromium` downloads one).
 
 <!-- Deliberately no test COUNT here. Both branches merged into this file had
      independently rewritten this section, and one of them wrote "77 unit
      tests" — a number that is wrong the first time anyone adds a test and
-     that nothing regenerates. `npm test` prints the real count on every run,
+     that nothing regenerates. `pnpm test` prints the real count on every run,
      which is the only place it stays true. -->
 
 ## Privacy
@@ -141,7 +141,7 @@ Every CI run scans both built extensions with `scripts/check-privacy.mjs` and fa
 The only exceptions are listed in the script with the reason they are safe. Today those are the popup's links to our other extensions on the Chrome Web Store and the welcome page's link to this repository (ordinary links you can click, never loaded), and the SVG namespace string used to draw icons. Check it yourself:
 
 ```bash
-npx wxt build && npx wxt build --browser firefox && npm run check:privacy
+pnpm exec wxt build && pnpm exec wxt build --browser firefox && pnpm run check:privacy
 ```
 
 The rules are unit-tested in `tests/privacy.test.ts`.
@@ -208,7 +208,7 @@ To recognise a JSON response, the extension has to look at every page you open. 
 - All are captured from the real built extension by `store/capture/capture.mjs`, using fictional data in `store/capture/fixtures/`. Re-run it after any visible change to the viewer and commit what it writes:
 
 ```bash
-npx wxt build
+pnpm exec wxt build
 PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs CHROME="/path/to/Google Chrome for Testing" node store/capture/capture.mjs
 ```
 

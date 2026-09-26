@@ -55,28 +55,28 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - Themes stored in `browser.storage.sync`.
 
 ## Installing
-- **`npm ci` only.** `package-lock.json` pins every version and integrity hash; `@brightbar-dev/review-nudge` is pinned exactly (`0.1.0`) in `package.json` too. Never `npm install <pkg>` or `npm update` a `@brightbar-dev/*` package: moving it is a deliberate PR that changes `package.json` and the lock together.
+- **`pnpm install --frozen-lockfile` only.** `pnpm-lock.yaml` pins every version and integrity hash; `@brightbar-dev/review-nudge` is pinned exactly (`0.1.0`) in `package.json` too. Never `pnpm add <pkg>` or `pnpm update` a `@brightbar-dev/*` package: moving it is a deliberate PR that changes `package.json` and the lock together.
 - `.npmrc` sends only the `@brightbar-dev` scope to `npm.pkg.github.com`; everything else comes from the public npm registry.
-- **Claude cloud sessions:** `.claude/hooks/cloud-install.sh` runs `npm ci` + `wxt prepare` at session start (`CLAUDE_CODE_REMOTE=true` only; locally it does nothing). The GitHub Packages token is an API credential the cloud environment's proxy attaches to `npm.pkg.github.com` requests. It is never in a file or an environment variable, so do not add an `_authToken` line to `.npmrc`.
+- **Claude cloud sessions:** `.claude/hooks/cloud-install.sh` runs `pnpm install --frozen-lockfile` + `wxt prepare` at session start (`CLAUDE_CODE_REMOTE=true` only; locally it does nothing). The GitHub Packages token is an API credential the cloud environment's proxy attaches to `npm.pkg.github.com` requests. It is never in a file or an environment variable, so do not add an `_authToken` line to `.npmrc`.
 
 ## Commands
 ```bash
-npm run dev          # Dev mode with HMR (Chrome)
-npm run dev:firefox  # Dev mode (Firefox)
-npm run build        # Production build (Chrome)
-npm run build:firefox # Production build (Firefox)
-npm run zip          # Build + zip for store submission
-npm run test         # Run Vitest tests
-npm run test:watch   # Watch mode
-npm run check:privacy  # After both builds: fail on network APIs, remote URLs, eval, extra permissions
+pnpm run dev          # Dev mode with HMR (Chrome)
+pnpm run dev:firefox  # Dev mode (Firefox)
+pnpm run build        # Production build (Chrome)
+pnpm run build:firefox # Production build (Firefox)
+pnpm run zip          # Build + zip for store submission
+pnpm run test         # Run Vitest tests
+pnpm run test:watch   # Watch mode
+pnpm run check:privacy  # After both builds: fail on network APIs, remote URLs, eval, extra permissions
 node tests/e2e/perf.mjs  # Local perf check in Chrome for Testing (see file header; not in CI)
 ```
 
 ## Testing
 ```bash
-npm test
+pnpm test
 ```
-- Unit tests via Vitest + WXT testing plugin (`npm test` prints the count — do not write it here, it goes stale)
+- Unit tests via Vitest + WXT testing plugin (`pnpm test` prints the count — do not write it here, it goes stale)
 - Tests cover: the parser (messages, line/column, JSONC, lossless), the lossless pre-scan, detection and JSONP/XSSI/NDJSON handling, the tree model and initial expansion, search and filter, serialisation, raw chunking, formatting, settings, keyboard shortcuts
 - The test environment is Node, with **no DOM** — logic that needs testing must be extracted into a pure module under `lib/` (this is why `TreeModel` and search know nothing about elements). Adding jsdom/happy-dom would mean a new devDependency.
 - `tests/e2e/perf.mjs` is a LOCAL end-to-end check (Chrome for Testing via Playwright, both from env vars): first render, long tasks, heap and DOM size per fixture, interaction timings on a 16.7 MB document, and plain-page cost. CI has no browser, so it is not wired into CI.
