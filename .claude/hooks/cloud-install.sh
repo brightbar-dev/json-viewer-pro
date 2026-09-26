@@ -13,8 +13,11 @@
 # printed so Claude sees it.
 [ "${CLAUDE_CODE_REMOTE:-}" = true ] || exit 0
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
-# The cloud image's preinstalled pnpm may not match the version pinned in package.json.
-command -v pnpm >/dev/null && [ "$(pnpm --version)" = 12.6.0 ] || npm install -g pnpm@12.6.0 >/dev/null 2>&1
+# The cloud image's preinstalled pnpm (10.x when measured 2026-09-26) is not the version pinned in
+# package.json "packageManager", and pnpm does not switch itself: install the pinned one. The version
+# is read from package.json so there is one pin, not two.
+want=$(node -p "(require('./package.json').packageManager || '').split('@')[1] || ''" 2>/dev/null)
+if [ -n "$want" ] && [ "$(pnpm --version 2>/dev/null)" != "$want" ]; then npm install -g "pnpm@$want" >/dev/null 2>&1; fi
 if out=$(pnpm install --frozen-lockfile 2>&1 && pnpm exec wxt prepare 2>&1); then
   echo "cloud-install: pnpm install --frozen-lockfile (frozen to pnpm-lock.yaml) + wxt prepare OK"
 else
