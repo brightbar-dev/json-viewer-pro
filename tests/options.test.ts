@@ -191,17 +191,26 @@ describe('options page', () => {
     expect((await stored())?.fontFamily).not.toContain('display');
   });
 
-  // BUG: choosing "Other…" while a preset font is saved cannot reach the custom field. save() stores
-  // fontFamily '' (the custom field is still empty), which differs from the saved preset, so the
-  // page's own storage.onChanged listener re-renders: '' matches the "Default monospace" option,
-  // the select jumps there and the custom row is hidden again. The user has to pick Default first
-  // (no storage change, no re-render) and then Other…. Their font is also silently reset.
-  it.skip('lets a user switch from a preset font to a custom one', async () => {
+  // Choosing Other… must not save '' and re-render the select back to a preset.
+  it('lets a user switch from a preset font to a custom one', async () => {
     await fakeBrowser.storage.sync.set({ settings: { ...DEFAULT_SETTINGS, fontFamily: 'Menlo' } });
     await openOptions();
     await change('fontPreset', (e: FakeSelect) => (e.value = 'custom'));
     expect(els.fontPreset.value).toBe('custom');
     expect(els.fontCustomRow.hidden).toBe(false);
+  });
+
+  it('keeps the saved font until a custom one is typed', async () => {
+    await fakeBrowser.storage.sync.set({ settings: { ...DEFAULT_SETTINGS, fontFamily: 'Menlo' } });
+    await openOptions();
+    await change('fontPreset', (e: FakeSelect) => (e.value = 'custom'));
+    expect((await stored())?.fontFamily).toBe('Menlo');
+    els.fontCustom.value = 'Iosevka';
+    els.fontCustom.handlers.input!();
+    vi.advanceTimersByTime(400);
+    await settle();
+    expect((await stored())?.fontFamily).toBe('Iosevka');
+    expect(els.fontPreset.value).toBe('custom');
   });
 
   it('follows changes made in the popup, but not while a custom font is being typed', async () => {
