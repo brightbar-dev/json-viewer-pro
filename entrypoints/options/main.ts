@@ -60,6 +60,8 @@ function say(text: string): void {
 
 async function save(): Promise<void> {
   fontCustomRow.hidden = fontPreset.value !== 'custom';
+  // Other… with nothing typed yet: keep the saved font until there is a name to save.
+  if (fontPreset.value === 'custom' && !fontCustom.value.trim()) return;
   const next = read();
   if (fontPreset.value === 'custom' && fontCustom.value.trim() && !next.fontFamily) {
     say('That font name has characters a font name cannot contain.');
