@@ -2,6 +2,13 @@
 
 All notable changes to JSON Viewer Pro will be documented in this file.
 
+## [0.8.1](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.8.0...json-viewer-pro-v0.8.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **options:** choosing "Other…" for the font no longer jumps back to the default font ([#30](https://github.com/brightbar-dev/json-viewer-pro/issues/30)) ([60d273e](https://github.com/brightbar-dev/json-viewer-pro/commit/60d273ea18f2174852104270dca2ea13ffafc6ee))
+
 ## [0.8.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.7.0...json-viewer-pro-v0.8.0) (2026-09-24)
 
 
