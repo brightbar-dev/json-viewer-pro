@@ -11,7 +11,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **entrypoints/popup/** — Browser action popup: tab status (asks the active tab with `tabs.sendMessage`; only a tab that rendered registers a listener — no `tabs` permission needed), enable toggle, theme, *Open the viewer*, shortcuts and settings links. Merges into stored settings; never overwrites fields it does not show.
 - **entrypoints/welcome/** — First-run page opened by `background.ts` on install: a live sample in `mountViewer({ host })`, the shortcuts, and exact steps for allowing file URLs (extension pages cannot open `chrome://extensions` themselves).
 - **entrypoints/viewer/** — The extension's own viewer page (`viewer.html`, linked from the popup): paste/open/drop JSON, JSONC or NDJSON, live validation with the error line marked, Format/Minify, then `mountViewer(doc, { host, appearance: false })`. Files over 2 MB skip the textarea.
-- **lib/review-nudge.ts** — The one-time store review request (`@brightbar-dev/review-nudge`, private on GitHub Packages; `.npmrc` + `NODE_AUTH_TOKEN` in CI). `recordDocumentViewed()` runs when the content script renders a document as JSON (not the error or empty view) and when the viewer page shows one; the popup mounts it above its footer. Its text and both links are `data-*` attributes on the popup's `#review-nudge` (strings stay in HTML), and both links have an entry in `check-privacy.mjs` `ALLOW`. The package owns the thresholds and the once-only rule. Never in the Firefox build.
+- **lib/review-nudge.ts** — The one-time store review request (`@brightbar-dev/review-nudge`, private on GitHub Packages; `.npmrc` + `NODE_AUTH_TOKEN` in CI, a proxy-injected credential in cloud sessions — see Installing). `recordDocumentViewed()` runs when the content script renders a document as JSON (not the error or empty view) and when the viewer page shows one; the popup mounts it above its footer. Its text and both links are `data-*` attributes on the popup's `#review-nudge` (strings stay in HTML), and both links have an entry in `check-privacy.mjs` `ALLOW`. The package owns the thresholds and the once-only rule. Never in the Firefox build.
 - **scripts/** — `privacy-scan.mjs` (rules: network APIs, remote addresses, code from strings, manifest over-reach; unit-tested in `tests/privacy.test.ts`) and `check-privacy.mjs` (the CI step over both builds, with its commented `ALLOW` list).
 - **entrypoints/options/** — Options page: theme, font, text size, indentation, initial expansion, image previews. Saves on every change; no Save button.
 - **lib/** — the viewer engine. Pure modules (unit-tested, no DOM):
@@ -53,6 +53,11 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **Toolbar buttons** are `button(label, title, icon, optionalLabel)` in `lib/viewer.ts`: an inline SVG icon (`lib/icons.ts`) plus a label. Secondary labels (`optionalLabel`) hide below 1100 px, all icon-button labels below 960 px; the aria-label keeps the name. Change a label with `setButton`, never `textContent`, or the icon is lost.
 - Uses `browser.*` API (WXT polyfill) — works in both Chrome and Firefox
 - Themes stored in `browser.storage.sync`.
+
+## Installing
+- **`npm ci` only.** `package-lock.json` pins every version and integrity hash; `@brightbar-dev/review-nudge` is pinned exactly (`0.1.0`) in `package.json` too. Never `npm install <pkg>` or `npm update` a `@brightbar-dev/*` package: moving it is a deliberate PR that changes `package.json` and the lock together.
+- `.npmrc` sends only the `@brightbar-dev` scope to `npm.pkg.github.com`; everything else comes from the public npm registry.
+- **Claude cloud sessions:** `.claude/hooks/cloud-install.sh` runs `npm ci` + `wxt prepare` at session start (`CLAUDE_CODE_REMOTE=true` only; locally it does nothing). The GitHub Packages token is an API credential the cloud environment's proxy attaches to `npm.pkg.github.com` requests. It is never in a file or an environment variable, so do not add an `_authToken` line to `.npmrc`.
 
 ## Commands
 ```bash
