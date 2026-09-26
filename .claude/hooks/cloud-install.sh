@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SessionStart hook (matcher "startup"): in a Claude cloud session, install dependencies
+# SessionStart hook (matcher "startup|resume": a resumed session may be on a fresh VM): in a Claude cloud session, install dependencies
 # frozen to package-lock.json. Locally it does nothing — you run `npm ci` yourself.
 #
 # Why here and not in the environment's setup script: @brightbar-dev/review-nudge comes
