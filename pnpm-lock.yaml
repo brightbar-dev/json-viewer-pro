@@ -167,8 +167,8 @@ importers:
   .:
     dependencies:
       '@brightbar-dev/review-nudge':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.1
+        version: 0.1.1
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -215,8 +215,8 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
-  '@brightbar-dev/review-nudge@0.1.0':
-    resolution: {integrity: sha512-XmV9DkMrccbKmZYrDn+R2AZitfmo7ULADngz4T+nhDKAA7vJfMqYceSIpLAqRLVqjxlQWqL+xPz8rvatmHvbPA==, tarball: https://npm.pkg.github.com/download/@brightbar-dev/review-nudge/0.1.0/030f802ff0b12df270654f3f4e29f404c54b2221}
+  '@brightbar-dev/review-nudge@0.1.1':
+    resolution: {integrity: sha512-iNZ+1TebaqcWzn8BacxizSPkFRJfyTFBiugUT2pQx+F4aH7JYDiSL4BKqEE5sIpTmnYiuReDQqw0n0jKwTnECw==, tarball: https://npm.pkg.github.com/download/@brightbar-dev/review-nudge/0.1.1/ddc70b7fa619a29ddb768b8a73bfc68098d32efe}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -1492,7 +1492,7 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@brightbar-dev/review-nudge@0.1.0': {}
+  '@brightbar-dev/review-nudge@0.1.1': {}
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
