@@ -55,7 +55,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - Themes stored in `browser.storage.sync`.
 
 ## Installing
-- **`pnpm install --frozen-lockfile` only.** `pnpm-lock.yaml` pins every version and integrity hash; `@brightbar-dev/review-nudge` is pinned exactly (`0.1.0`) in `package.json` too. Never `pnpm add <pkg>` or `pnpm update` a `@brightbar-dev/*` package: moving it is a deliberate PR that changes `package.json` and the lock together.
+- **`pnpm install --frozen-lockfile` only.** `pnpm-lock.yaml` pins every version and integrity hash; `@brightbar-dev/review-nudge` is pinned to an exact version (no `^` or `~`) in `package.json` too. Never `pnpm add <pkg>` or `pnpm update` a `@brightbar-dev/*` package: moving it is a deliberate PR that changes `package.json` and the lock together.
 - `.npmrc` sends only the `@brightbar-dev` scope to `npm.pkg.github.com`; everything else comes from the public npm registry.
 - **Claude cloud sessions:** `.claude/hooks/cloud-install.sh` runs `pnpm install --frozen-lockfile` + `wxt prepare` at session start (`CLAUDE_CODE_REMOTE=true` only; locally it does nothing). The GitHub Packages token is an API credential the cloud environment's proxy attaches to `npm.pkg.github.com` requests. It is never in a file or an environment variable, so do not add an `_authToken` line to `.npmrc`.
 
