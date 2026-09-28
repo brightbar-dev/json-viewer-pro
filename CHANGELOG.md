@@ -2,6 +2,13 @@
 
 All notable changes to JSON Viewer Pro will be documented in this file.
 
+## [0.8.2](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.8.1...json-viewer-pro-v0.8.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **deps:** review-nudge 0.1.1, so the nudge shows only once when two pages open together ([#34](https://github.com/brightbar-dev/json-viewer-pro/issues/34)) ([c855832](https://github.com/brightbar-dev/json-viewer-pro/commit/c855832949f6e9ba64621c66958d872dd08e7ddf))
+
 ## [0.8.1](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.8.0...json-viewer-pro-v0.8.1) (2026-09-26)
 
 
