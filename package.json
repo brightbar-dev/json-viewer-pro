@@ -1,7 +1,7 @@
 {
   "name": "json-viewer-pro",
   "description": "Clean, fast JSON viewer with tree view, search, and syntax highlighting. No ads, no tracking, no popups.",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.6.0",
