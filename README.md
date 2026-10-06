@@ -193,6 +193,7 @@ A VIEWER PAGE OF ITS OWN
 
 PRIVATE, AND YOU CAN CHECK
 - No tracking, analytics, ads or donation popups, and no network requests of its own
+- One request, once: after you have used it on a few different days, it asks whether you would leave a review, with a separate link for reporting a problem, and it never asks again
 - Open source: https://github.com/brightbar-dev/json-viewer-pro
 - Every build runs an automated check that fails if the code contains a network API, a remote address or code built from strings
 - One API permission, storage, for your settings

@@ -229,7 +229,7 @@ async function promo(file, width, height, html) {
 await promo(path.join(promoDir, 'small-440x280.png'), 440, 280, `
   <div style="position:absolute;left:36px;top:40px;display:flex;align-items:center;gap:18px">
     <img class="icon" src="data:image/png;base64,${iconData}" width="76" height="76">
-    <div style="font-size:31px;font-weight:800;line-height:1.05;letter-spacing:-0.02em">JSON<br>Viewer Pro</div>
+    <div><div style="font-size:16px;font-weight:600;letter-spacing:0.02em;opacity:0.85">Brightbar</div><div style="font-size:31px;font-weight:800;line-height:1.05;letter-spacing:-0.02em">JSON<br>Viewer</div></div>
   </div>
   <div style="position:absolute;left:36px;top:158px;font-size:21px;font-weight:600">Fast. Exact. Private.</div>
   <div style="position:absolute;left:36px;top:192px;right:30px;font-size:15px;line-height:1.45;opacity:0.9">Huge files, exact big numbers, JSONPath and tables. No tracking, ever.</div>`);
@@ -238,7 +238,7 @@ await promo(path.join(promoDir, 'marquee-1400x560.png'), 1400, 560, `
   <div style="position:absolute;left:72px;top:82px;width:470px">
     <div style="display:flex;align-items:center;gap:22px">
       <img class="icon" src="data:image/png;base64,${iconData}" width="96" height="96">
-      <div style="font-size:50px;font-weight:800;line-height:1.02;letter-spacing:-0.02em">JSON<br>Viewer Pro</div>
+      <div><div style="font-size:24px;font-weight:600;letter-spacing:0.02em;opacity:0.85">Brightbar</div><div style="font-size:50px;font-weight:800;line-height:1.02;letter-spacing:-0.02em">JSON<br>Viewer</div></div>
     </div>
     <div style="margin-top:30px;font-size:27px;font-weight:600;line-height:1.25">The fast, exact, private JSON viewer</div>
     <ul style="margin:22px 0 0;padding:0;list-style:none;font-size:20px;line-height:1.75;opacity:0.95">
