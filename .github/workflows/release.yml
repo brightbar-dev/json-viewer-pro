@@ -48,12 +48,21 @@ jobs:
         run: pnpm exec wxt zip
 
       - name: Build Firefox ZIP
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # zip.downloadPackages packs @brightbar-dev/review-nudge into the sources zip
         run: pnpm exec wxt zip --browser firefox
 
       - name: Upload ZIPs to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ needs.release-please.outputs.tag_name }} .output/*.zip
+
+      # For the amo and edge jobs, which publish the same zips.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zips
+          path: .output/*.zip
+          retention-days: 7
 
       # Chrome Web Store API v2 (the v1 API stops on 2026-10-15). The logic lives in a script so that
       # tests/cws-publish.test.mjs can run it: the release path is otherwise untested until a release is cut.
@@ -68,3 +77,48 @@ jobs:
           CWS_ITEM_ID: iodhhjpjemdfmmfffmejfnbbjbfafoac
           CWS_AUTO_PUBLISH: ${{ vars.CWS_AUTO_PUBLISH }}
         run: bash scripts/cws-publish.sh
+
+  # Firefox (addons.mozilla.org) and Microsoft Edge Add-ons, through the shared actions in
+  # brightbar-dev/wxt-packages/store-publish. Each stays a dry run (build-only: every offline check,
+  # no store call, no credential) until the repo variable AMO_ENABLED / EDGE_ENABLED is 'true'.
+  # Turning one on is a product launch: joint with Ken (org-work RUNBOOK §7).
+  amo:
+    needs: [release-please, build-and-upload]
+    # Not gated on the Chrome Web Store step: a CWS failure must not hold back the other stores.
+    if: ${{ !cancelled() && needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: zips
+          path: .output
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - uses: brightbar-dev/wxt-packages/store-publish/amo@d1266cbf5e1723ac5f77942bb2a54af2daa3432d # amo-edge-release
+        with:
+          build-only: ${{ vars.AMO_ENABLED != 'true' }}
+          jwt-issuer: ${{ secrets.AMO_JWT_ISSUER }}
+          jwt-secret: ${{ secrets.AMO_JWT_SECRET }}
+
+  edge:
+    needs: [release-please, build-and-upload]
+    # Not gated on the Chrome Web Store step: a CWS failure must not hold back the other stores.
+    if: ${{ !cancelled() && needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: zips
+          path: .output
+      - uses: brightbar-dev/wxt-packages/store-publish/edge@d1266cbf5e1723ac5f77942bb2a54af2daa3432d # amo-edge-release
+        with:
+          build-only: ${{ vars.EDGE_ENABLED != 'true' }}
+          client-id: ${{ secrets.EDGE_CLIENT_ID }}
+          api-key: ${{ secrets.EDGE_API_KEY }}
+          product-id: ${{ vars.EDGE_PRODUCT_ID }}
+          auto-publish: ${{ vars.EDGE_AUTO_PUBLISH }}

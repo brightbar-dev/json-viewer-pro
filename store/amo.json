@@ -1,0 +1,7 @@
+{
+  "categories": { "firefox": ["web-development"] },
+  "summary": { "en-US": "JSON viewer and formatter: fast tree view for huge files, dark mode, JSONPath search, exact big numbers. No tracking. Open source." },
+  "homepage": { "en-US": "https://brightbar.dev/products/json-viewer-pro/" },
+  "support_url": { "en-US": "https://github.com/brightbar-dev/json-viewer-pro/issues" },
+  "version": { "license": "MIT" }
+}
