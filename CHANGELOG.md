@@ -2,6 +2,13 @@
 
 All notable changes to JSON Viewer Pro will be documented in this file.
 
+## [0.9.0](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.8.2...json-viewer-pro-v0.9.0) (2026-10-07)
+
+
+### Features
+
+* two-pane JSON compare with JSON Patch export ([#41](https://github.com/brightbar-dev/json-viewer-pro/issues/41)) ([b6b36b9](https://github.com/brightbar-dev/json-viewer-pro/commit/b6b36b9c7069e21967609d88a7508b473bcd2495))
+
 ## [0.8.2](https://github.com/brightbar-dev/json-viewer-pro/compare/json-viewer-pro-v0.8.1...json-viewer-pro-v0.8.2) (2026-09-28)
 
 
