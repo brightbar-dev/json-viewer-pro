@@ -28,7 +28,7 @@ export class LosslessNumber {
  * trailing zeros, so `1.50`, `15e-1` and `1.5` all compare equal. Zero of
  * either sign is `0`.
  */
-function canonical(src: string): string {
+export function canonical(src: string): string {
   let s = 0;
   const negative = src.charCodeAt(0) === 45; // '-'
   if (negative || src.charCodeAt(0) === 43) s = 1; // '+' (String(n) never emits it; harmless)

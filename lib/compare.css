@@ -1,0 +1,376 @@
+/* The Compare screen (lib/compare.ts). Imported by the viewer page only.
+ * Colours come from the theme variables in viewer.css, plus the four below;
+ * tests/contrast.test.ts holds every text colour to 4.5:1 on each of them. */
+
+.jvp-light {
+  --jvp-add-bg: #e6ffec;
+  --jvp-del-bg: #fff0ee;
+  --jvp-add-mark: #116329;
+  --jvp-del-mark: #a40e26;
+}
+
+.jvp-dark {
+  --jvp-add-bg: #0f2d1b;
+  --jvp-del-bg: #3c1618;
+  --jvp-add-mark: #7ee787;
+  --jvp-del-mark: #ff9992;
+}
+
+.cmp {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--app-bar-h, 46px));
+  font: 13px/1.4 var(--jvp-font-ui);
+}
+
+.cmp[hidden],
+.cmp-inputs[hidden],
+.cmp-result[hidden],
+.cmp-tree[hidden],
+.cmp-empty[hidden],
+.cmp [hidden] {
+  display: none;
+}
+
+.cmp-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--jvp-border);
+  background: var(--jvp-bg-alt);
+}
+
+.cmp-bar fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.cmp-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cmp-check input {
+  margin: 0;
+  accent-color: var(--jvp-accent);
+}
+
+.cmp-check input:focus-visible {
+  outline: 2px solid var(--jvp-accent);
+  outline-offset: 2px;
+}
+
+.cmp-position {
+  color: var(--jvp-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-spread {
+  margin-left: auto;
+}
+
+.cmp-inputs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px 16px 12px;
+  overflow: auto;
+}
+
+.cmp-inputs .hint {
+  margin-bottom: 10px;
+}
+
+.cmp-panes {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 280px;
+}
+
+@media (max-width: 760px) {
+  .cmp-panes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cmp-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  outline: 1px solid var(--jvp-border);
+  outline-offset: -1px;
+  background: var(--jvp-bg);
+}
+
+.cmp-pane:focus-within,
+.cmp-pane.cmp-drag {
+  outline: 2px solid var(--jvp-accent);
+}
+
+.cmp-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--jvp-border);
+  border-radius: 8px 8px 0 0;
+  background: var(--jvp-bg-alt);
+}
+
+.cmp-pane-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font: 600 13px/1.4 var(--jvp-font-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmp-pane-title {
+  color: var(--jvp-muted);
+  font-weight: 400;
+}
+
+.cmp-text {
+  flex: 1;
+  min-height: 160px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--jvp-text);
+  font: 13px/20px var(--jvp-font);
+  tab-size: 2;
+  white-space: pre;
+}
+
+.cmp-text::placeholder {
+  color: var(--jvp-muted);
+}
+
+.cmp-pane-status {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--jvp-border);
+  color: var(--jvp-muted);
+}
+
+.cmp-pane-status.ok {
+  color: var(--jvp-string);
+}
+
+.cmp-pane-status.warn {
+  color: var(--jvp-text);
+}
+
+.cmp-pane-status.error {
+  color: var(--jvp-error);
+}
+
+.cmp-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.cmp-message {
+  color: var(--jvp-error);
+}
+
+.cmp-message:empty {
+  display: none;
+}
+
+.cmp-result {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.cmp-summary {
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--jvp-border);
+  font-weight: 600;
+}
+
+.cmp-heads,
+.cmp-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.cmp-heads {
+  border-bottom: 1px solid var(--jvp-border);
+  background: var(--jvp-bg-alt);
+  font-weight: 600;
+}
+
+.cmp-heads > div {
+  min-width: 0;
+  padding: 3px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmp-heads > div + div {
+  border-left: 1px solid var(--jvp-border);
+}
+
+.cmp-tree {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  outline: none;
+  font: var(--jvp-font-size) / var(--jvp-row-h) var(--jvp-font);
+}
+
+.cmp-tree:focus-visible {
+  outline: 2px solid var(--jvp-accent);
+  outline-offset: -2px;
+}
+
+.cmp-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.cmp-window {
+  position: absolute;
+  right: 0;
+  left: 0;
+}
+
+.cmp-row {
+  position: relative;
+  height: var(--jvp-row-h);
+  white-space: pre;
+  cursor: default;
+}
+
+.cmp-row.cmp-selected {
+  z-index: 1;
+  outline: 2px solid var(--jvp-accent);
+  outline-offset: -2px;
+}
+
+.cmp-mark {
+  color: var(--jvp-muted);
+  font-weight: 700;
+  text-align: center;
+  user-select: none;
+}
+
+.cmp-k-added > .cmp-mark {
+  background: var(--jvp-add-bg);
+  color: var(--jvp-add-mark);
+}
+
+.cmp-k-removed > .cmp-mark {
+  background: var(--jvp-del-bg);
+  color: var(--jvp-del-mark);
+}
+
+.cmp-k-changed > .cmp-mark,
+.cmp-k-modified > .cmp-mark {
+  background: var(--jvp-current-row);
+  color: var(--jvp-text);
+}
+
+.cmp-cell {
+  position: relative;
+  min-width: 0;
+  padding: 0 8px 0 calc(var(--d, 0) * var(--jvp-indent) + 22px);
+  overflow: hidden;
+  border-left: 1px solid var(--jvp-border);
+  text-overflow: ellipsis;
+}
+
+.cmp-add {
+  background: var(--jvp-add-bg);
+}
+
+.cmp-del {
+  background: var(--jvp-del-bg);
+}
+
+/* Nothing on this side: hatching, so an empty cell is not mistaken for an empty value. */
+.cmp-gap {
+  background: repeating-linear-gradient(135deg, transparent 0 6px, var(--jvp-border) 6px 7px);
+}
+
+.cmp-row:hover > .cmp-cell:not(.cmp-add):not(.cmp-del):not(.cmp-gap) {
+  background: var(--jvp-hover);
+}
+
+.cmp-toggle {
+  position: absolute;
+  left: calc(var(--d, 0) * var(--jvp-indent) + 4px);
+  width: 18px;
+  color: var(--jvp-muted);
+  text-align: center;
+  user-select: none;
+}
+
+.cmp-toggle::before {
+  content: '\25B8';
+}
+
+.cmp-open > .cmp-toggle::before {
+  content: '\25BE';
+}
+
+.cmp-badge {
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--jvp-accent-soft);
+  color: var(--jvp-accent-text);
+  font: 500 11px/16px var(--jvp-font-ui);
+}
+
+.cmp-empty {
+  padding: 28px 16px;
+  color: var(--jvp-muted);
+  font-size: 14px;
+}
+
+.cmp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  .cmp-add,
+  .cmp-del {
+    border-left: 3px solid Highlight;
+  }
+}

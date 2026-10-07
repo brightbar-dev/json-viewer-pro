@@ -16,11 +16,16 @@
       <button type="button" class="jvp-btn" id="minify" title="Remove all insignificant whitespace">Minify</button>
       <button type="button" class="jvp-btn" id="sample" title="Load an example document">Example</button>
       <button type="button" class="jvp-btn" id="clear">Clear</button>
+      <button type="button" class="jvp-btn" id="compare" title="Compare this with another JSON document">Compare…</button>
       <button type="button" class="jvp-btn jvp-btn-primary" id="view" title="Show it as a tree (Ctrl/Cmd+Enter)">View as tree</button>
     </div>
     <div class="app-actions" id="viewer-actions" hidden>
       <span class="file-name" id="file-name"></span>
+      <button type="button" class="jvp-btn" id="compare-with" title="Compare this document with another one">Compare with…</button>
       <button type="button" class="jvp-btn" id="edit">Back to the editor</button>
+    </div>
+    <div class="app-actions" id="compare-actions" hidden>
+      <button type="button" class="jvp-btn" id="compare-back">Close compare</button>
     </div>
   </header>
 
@@ -38,6 +43,69 @@
   </main>
 
   <div class="viewer-host" id="viewer-host" hidden></div>
+  <section class="cmp" id="compare-screen" aria-label="Compare two JSON documents" hidden>
+    <div class="cmp-bar">
+      <fieldset>
+        <legend class="cmp-sr">Comparison options</legend>
+        <label class="cmp-check"><input type="checkbox" id="cmp-ignore-order" checked> Ignore key order</label>
+        <label class="cmp-check" title="Compare arrays as collections: the same items in another order are equal"><input type="checkbox" id="cmp-unordered"> Arrays as unordered sets</label>
+        <label class="cmp-check"><input type="checkbox" id="cmp-changes-only" disabled> Changes only</label>
+      </fieldset>
+      <div class="jvp-group" role="group" aria-label="Move between differences">
+        <button type="button" class="jvp-btn jvp-btn-small" id="cmp-prev" title="Previous difference (P, Shift+F3, Alt+Up)" disabled>↑ Previous</button>
+        <button type="button" class="jvp-btn jvp-btn-small" id="cmp-next" title="Next difference (N, F3, Alt+Down)" disabled>↓ Next</button>
+      </div>
+      <span class="cmp-position" id="cmp-position"></span>
+      <div class="cmp-spread jvp-group" role="group" aria-label="Tree and patch actions">
+        <button type="button" class="jvp-btn jvp-btn-small" id="cmp-expand" disabled>Expand all</button>
+        <button type="button" class="jvp-btn jvp-btn-small" id="cmp-collapse" disabled>Collapse all</button>
+        <button type="button" class="jvp-btn jvp-btn-small" id="cmp-patch" title="Copy an RFC 6902 JSON Patch that turns the left document into the right one" disabled><span class="jvp-btn-label">Copy JSON Patch</span></button>
+        <button type="button" class="jvp-btn jvp-btn-small" id="cmp-edit" hidden>Edit the inputs</button>
+      </div>
+    </div>
+
+    <div class="cmp-inputs" id="cmp-inputs">
+      <p class="hint">Paste JSON on each side, open a file, or drop one onto a side. JSONC and NDJSON work too. Nothing leaves this computer.</p>
+      <div class="cmp-panes">
+        <section class="cmp-pane" id="cmp-pane-left" aria-labelledby="cmp-left-title">
+          <div class="cmp-pane-head">
+            <h2 id="cmp-left-title">Left (original)<span class="cmp-pane-title"></span></h2>
+            <button type="button" class="jvp-btn jvp-btn-small" data-act="open">Open file…</button>
+            <button type="button" class="jvp-btn jvp-btn-small" data-act="clear">Clear</button>
+            <input type="file" accept=".json,.jsonc,.json5,.ndjson,.jsonl,.geojson,.har,.txt,application/json,text/plain" hidden aria-label="Open a file for the left side">
+          </div>
+          <textarea class="cmp-text" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off" aria-labelledby="cmp-left-title" placeholder='{ "paste": "your JSON here" }'></textarea>
+          <div class="cmp-pane-status" role="status" aria-live="polite"></div>
+        </section>
+        <section class="cmp-pane" id="cmp-pane-right" aria-labelledby="cmp-right-title">
+          <div class="cmp-pane-head">
+            <h2 id="cmp-right-title">Right (changed)<span class="cmp-pane-title"></span></h2>
+            <button type="button" class="jvp-btn jvp-btn-small" data-act="open">Open file…</button>
+            <button type="button" class="jvp-btn jvp-btn-small" data-act="clear">Clear</button>
+            <input type="file" accept=".json,.jsonc,.json5,.ndjson,.jsonl,.geojson,.har,.txt,application/json,text/plain" hidden aria-label="Open a file for the right side">
+          </div>
+          <textarea class="cmp-text" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off" aria-labelledby="cmp-right-title" placeholder='{ "paste": "your JSON here" }'></textarea>
+          <div class="cmp-pane-status" role="status" aria-live="polite"></div>
+        </section>
+      </div>
+      <div class="cmp-run">
+        <button type="button" class="jvp-btn jvp-btn-primary" id="cmp-run" title="Compare the two documents (Ctrl/Cmd+Enter)">Compare</button>
+        <button type="button" class="jvp-btn" id="cmp-swap" title="Swap the left and right documents">Swap sides</button>
+        <span class="cmp-message" id="cmp-message" role="alert"></span>
+      </div>
+    </div>
+
+    <div class="cmp-result" id="cmp-result" hidden>
+      <div class="cmp-summary" id="cmp-summary" role="status"></div>
+      <div class="cmp-heads" aria-hidden="true"><div></div><div id="cmp-head-left"></div><div id="cmp-head-right"></div></div>
+      <div class="cmp-tree" id="cmp-tree" role="tree" tabindex="0" aria-label="Differences between the two documents. Arrow keys move, N and P jump to the next and previous difference.">
+        <div class="cmp-spacer" id="cmp-spacer"><div class="cmp-window" id="cmp-window"></div></div>
+      </div>
+      <div class="cmp-empty" id="cmp-empty" role="status" hidden></div>
+    </div>
+    <div class="cmp-sr" id="cmp-live" aria-live="polite"></div>
+  </section>
+
   <div class="drop-overlay" id="drop" hidden><span>Drop a file to view it</span></div>
 
   <script type="module" src="./main.ts"></script>

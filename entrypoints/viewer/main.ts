@@ -1,4 +1,6 @@
 import '../../lib/viewer.css';
+import '../../lib/compare.css';
+import { initCompare } from '../../lib/compare';
 import { analyze, type ContentClass, type JsonDoc, type ViewerDoc } from '../../lib/document';
 import { formatNumber, formatSize, utf8Length } from '../../lib/format';
 import { stringifyJson } from '../../lib/serialize';
@@ -20,6 +22,8 @@ const viewerActions = byId<HTMLElement>('viewer-actions');
 const host = byId<HTMLElement>('viewer-host');
 const fileNameEl = byId<HTMLElement>('file-name');
 const drop = byId<HTMLElement>('drop');
+const compareScreen = byId<HTMLElement>('compare-screen');
+const compareActions = byId<HTMLElement>('compare-actions');
 
 /** Line height of the editor, in px (style.css). */
 const LINE = 20;
@@ -52,6 +56,10 @@ let fileName = '';
 let fileClass: ContentClass = 'json';
 /** A file too large for the editor, kept here instead. */
 let bigText: string | null = null;
+/** The text behind the document the viewer is showing, so Compare can start from it. */
+let viewerSource = '';
+let compareFrom: 'editor' | 'viewer' = 'editor';
+const compare = initCompare(compareScreen, () => settings);
 
 void browser.storage.sync.get('settings').then((data) => {
   settings = normalizeSettings(data.settings);
@@ -62,6 +70,7 @@ browser.storage.onChanged.addListener((changes, area) => {
   settings = normalizeSettings(changes.settings.newValue);
   appearance(settings);
   viewer?.applySettings(settings);
+  compare.applySettings(settings);
 });
 
 const text = () => bigText ?? input.value;
@@ -208,6 +217,7 @@ function view(): void {
 
 function showViewer(doc: JsonDoc, source: string): void {
   viewer?.destroy();
+  viewerSource = source;
   editorScreen.hidden = true;
   editorActions.hidden = true;
   viewerActions.hidden = false;
@@ -222,6 +232,31 @@ function showViewer(doc: JsonDoc, source: string): void {
   });
   window.scrollTo(0, 0);
   void recordDocumentViewed();
+}
+
+function openCompare(from: 'editor' | 'viewer'): void {
+  compareFrom = from;
+  const source = from === 'viewer' ? viewerSource : text();
+  editorScreen.hidden = true;
+  editorActions.hidden = true;
+  viewerActions.hidden = true;
+  host.hidden = true;
+  compareScreen.hidden = false;
+  compareActions.hidden = false;
+  compare.open({ text: source, name: fileName, cls: fileClass });
+}
+
+function closeCompare(): void {
+  compareScreen.hidden = true;
+  compareActions.hidden = true;
+  if (compareFrom === 'viewer') {
+    host.hidden = false;
+    viewerActions.hidden = false;
+  } else {
+    editorScreen.hidden = false;
+    editorActions.hidden = false;
+    input.focus();
+  }
 }
 
 function showEditor(): void {
@@ -258,6 +293,9 @@ async function openFile(file: File): Promise<void> {
 byId('format').addEventListener('click', () => reformat(2));
 byId('minify').addEventListener('click', () => reformat(0));
 byId('view').addEventListener('click', view);
+byId('compare').addEventListener('click', () => openCompare('editor'));
+byId('compare-with').addEventListener('click', () => openCompare('viewer'));
+byId('compare-back').addEventListener('click', closeCompare);
 byId('edit').addEventListener('click', showEditor);
 byId('sample').addEventListener('click', () => {
   bigText = null;
@@ -286,7 +324,7 @@ fileInput.addEventListener('change', () => {
 const carriesFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
 let dragDepth = 0;
 window.addEventListener('dragenter', (e) => {
-  if (!carriesFiles(e)) return;
+  if (!carriesFiles(e) || !compareScreen.hidden) return;
   dragDepth++;
   drop.hidden = false;
 });
@@ -301,6 +339,8 @@ window.addEventListener('dragover', (e) => {
 window.addEventListener('drop', (e) => {
   if (!carriesFiles(e)) return;
   e.preventDefault();
+  // On the Compare screen each side takes its own drops (lib/compare.ts); a drop elsewhere does nothing.
+  if (!compareScreen.hidden) return;
   dragDepth = 0;
   drop.hidden = true;
   const file = e.dataTransfer?.files[0];
