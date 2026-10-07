@@ -11,6 +11,7 @@ describe('contrast maths', () => {
 
 // Read from disk: Vitest turns CSS imports (even `?raw`) into empty strings.
 const css = readFileSync(new URL('../lib/viewer.css', import.meta.url), 'utf8');
+const compareCss = readFileSync(new URL('../lib/compare.css', import.meta.url), 'utf8');
 
 // The themes are held to WCAG 2.x AA (4.5:1) for every text colour on every
 // background it can appear on. Change a colour in lib/viewer.css and this test
@@ -30,6 +31,22 @@ for (const theme of ['.jvp-light', '.jvp-dark']) {
         }
       });
     }
+    // The Compare screen's added / removed backgrounds (lib/compare.css).
+    it('every text colour on the Compare screen added and removed backgrounds', () => {
+      const c = cssVariables(compareCss, theme);
+      for (const bg of ['--jvp-add-bg', '--jvp-del-bg']) {
+        expect(c[bg], bg).toBeDefined();
+        for (const fg of FOREGROUNDS.filter((f) => f !== '--jvp-error')) {
+          expect({ pair: `${fg} on ${bg}`, ratio: +contrastRatio(v[fg]!, c[bg]!).toFixed(2) }).toMatchObject({ ratio: expect.toSatisfy((r: number) => r >= 4.5) });
+        }
+      }
+    });
+    it('the + and − markers on their backgrounds', () => {
+      const c = cssVariables(compareCss, theme);
+      for (const [fg, bg] of [['--jvp-add-mark', '--jvp-add-bg'], ['--jvp-del-mark', '--jvp-del-bg']] as const) {
+        expect({ pair: `${fg} on ${bg}`, ratio: +contrastRatio(c[fg]!, c[bg]!).toFixed(2) }).toMatchObject({ ratio: expect.toSatisfy((r: number) => r >= 4.5) });
+      }
+    });
     it('button text on the accent colour', () => expect(contrastRatio('#ffffff', v['--jvp-accent']!)).toBeGreaterThanOrEqual(4.5));
     it('error text on the error background', () => expect(contrastRatio(v['--jvp-text']!, v['--jvp-error-bg']!)).toBeGreaterThanOrEqual(4.5));
     it('toolbar and badge text on their backgrounds', () => {
