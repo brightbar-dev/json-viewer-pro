@@ -41,3 +41,18 @@ jobs:
       # code from strings, and no permission beyond storage, in either build.
       - name: Privacy check
         run: node scripts/check-privacy.mjs .output/chrome-mv3 .output/firefox-mv2
+      # The Firefox and Edge release path, as a dry run (build-only: no store call, no credential):
+      # web-ext lint, the AMO sources zip rebuilt with no registry credentials and compared byte for
+      # byte, AMO's manifest rules, and the Edge package check. release.yml runs the same actions.
+      - name: Zip Chrome and Firefox
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # zip.downloadPackages packs @brightbar-dev/review-nudge
+        run: pnpm exec wxt zip && pnpm exec wxt zip --browser firefox
+      - name: AMO dry run
+        uses: brightbar-dev/wxt-packages/store-publish/amo@d1266cbf5e1723ac5f77942bb2a54af2daa3432d # amo-edge-release
+        with:
+          build-only: 'true'
+      - name: Edge dry run
+        uses: brightbar-dev/wxt-packages/store-publish/edge@d1266cbf5e1723ac5f77942bb2a54af2daa3432d # amo-edge-release
+        with:
+          build-only: 'true'

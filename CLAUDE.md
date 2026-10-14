@@ -86,6 +86,7 @@ pnpm test
 - WXT framework with vanilla TypeScript (no UI framework)
 - Version: semver, 0.2.x (WXT rewrite), 1.x = production-ready
 - Release: merging the release-please PR runs `.github/workflows/release.yml`, which builds both zips and calls `scripts/cws-publish.sh` (Chrome Web Store API v2, the only API that works after 2026-10-15; `CWS_AUTO_PUBLISH=false` uploads to the draft without submitting). `tests/cws-publish.test.mjs` runs that script against a stub `curl`, because nothing else exercises the release path before a release is cut. Change the script, run the test.
+- Firefox and Edge: release.yml's `amo` and `edge` jobs call the shared actions in `brightbar-dev/wxt-packages/store-publish` (README there), and `ci.yml` runs both as a dry run on every PR. They stay dry runs (`build-only`) until the repo variable `AMO_ENABLED` / `EDGE_ENABLED` is `true`. The AMO dry run lints the Firefox zip, rebuilds it from the sources zip with no registry credentials and requires it identical, and enforces AMO's 50-character name limit — which is why the Firefox build's name is the plain brand. The gecko ID `json-viewer-pro@brightbar.dev` is permanent once on AMO. `store/amo.json` is used only for the first AMO submission.
 - All user-facing strings in HTML, not TS
 - Privacy policy must be kept current with any permission changes
 - Do NOT add Claude/AI as co-author or contributor in commits, PRs, or code
