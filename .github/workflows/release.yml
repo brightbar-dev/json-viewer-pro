@@ -97,7 +97,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
-      - uses: brightbar-dev/wxt-packages/store-publish/amo@d1266cbf5e1723ac5f77942bb2a54af2daa3432d # amo-edge-release
+      - uses: brightbar-dev/wxt-packages/store-publish/amo@745febc1b98dcdf3afd0b582867af77bc717224f # main (wxt-packages#14)
         with:
           build-only: ${{ vars.AMO_ENABLED != 'true' }}
           jwt-issuer: ${{ secrets.AMO_JWT_ISSUER }}
@@ -115,7 +115,7 @@ jobs:
         with:
           name: zips
           path: .output
-      - uses: brightbar-dev/wxt-packages/store-publish/edge@d1266cbf5e1723ac5f77942bb2a54af2daa3432d # amo-edge-release
+      - uses: brightbar-dev/wxt-packages/store-publish/edge@745febc1b98dcdf3afd0b582867af77bc717224f # main (wxt-packages#14)
         with:
           build-only: ${{ vars.EDGE_ENABLED != 'true' }}
           client-id: ${{ secrets.EDGE_CLIENT_ID }}

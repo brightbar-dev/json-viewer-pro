@@ -49,10 +49,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # zip.downloadPackages packs @brightbar-dev/review-nudge
         run: pnpm exec wxt zip && pnpm exec wxt zip --browser firefox
       - name: AMO dry run
-        uses: brightbar-dev/wxt-packages/store-publish/amo@d1266cbf5e1723ac5f77942bb2a54af2daa3432d # amo-edge-release
+        uses: brightbar-dev/wxt-packages/store-publish/amo@745febc1b98dcdf3afd0b582867af77bc717224f # main (wxt-packages#14)
         with:
           build-only: 'true'
       - name: Edge dry run
-        uses: brightbar-dev/wxt-packages/store-publish/edge@d1266cbf5e1723ac5f77942bb2a54af2daa3432d # amo-edge-release
+        uses: brightbar-dev/wxt-packages/store-publish/edge@745febc1b98dcdf3afd0b582867af77bc717224f # main (wxt-packages#14)
         with:
           build-only: 'true'
