@@ -2,3 +2,6 @@ allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
   - '@brightbar-dev/*'
+
+overrides:
+  vite: 8.3.3
