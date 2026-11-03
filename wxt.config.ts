@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt';
+import amo from './store/amo.json';
 
 export default defineConfig({
   // Vite's module-preload polyfill calls fetch(). The extension's pages load
@@ -9,7 +10,7 @@ export default defineConfig({
     // AMO refuses a name over 50 characters; the en Chrome name is 67. Every other locale's name is
     // already just the brand, so Firefox gets the brand in every locale.
     name: browser === 'firefox' ? 'Brightbar JSON Viewer' : '__MSG_appName__',
-    description: '__MSG_appDescription__',
+    description: browser === 'firefox' ? amo.summary['en-US'] : '__MSG_appDescription__',
     default_locale: 'en',
     permissions: ['storage'],
     // Firefox only. The add-on ID is permanent once a version is on AMO, and AMO refuses a new

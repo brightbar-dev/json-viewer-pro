@@ -24,5 +24,6 @@
   },
   "dependencies": {
     "@brightbar-dev/review-nudge": "0.1.1"
-  }
+  },
+  "license": "FSL-1.1-MIT"
 }
